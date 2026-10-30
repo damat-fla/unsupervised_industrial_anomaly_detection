@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import torch
 import torchvision.utils as vutils
 
+from engine import compute_anomaly_map
+
 
 def visualize_batch(batch, max_images=16, nrow=4, title="Training Batch", figsize=(8, 8)):
     """
@@ -32,7 +34,7 @@ def visualize_anomalies(model, dataloader, device, num_samples=4):
 
     with torch.no_grad():
         reconstructions = model(images)
-        anomaly_maps = torch.mean((images - reconstructions) ** 2, dim=1, keepdim=True)
+        anomaly_maps = compute_anomaly_map(images, reconstructions)
 
     images = images.cpu()
     reconstructions = reconstructions.cpu()

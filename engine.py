@@ -9,6 +9,8 @@ from sklearn.metrics import roc_auc_score
 import torch
 from tqdm import tqdm
 
+from losses import compute_ssim_map
+
 
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
@@ -76,7 +78,11 @@ def train(model, train_loader, criterion, optimizer, epochs, device,val_loader =
     return history
 
 
-def compute_anomaly_map(images, reconstructions):
+def compute_anomaly_map(images, reconstructions, method="l1_ssim", alpha=0.5):
+    if method == "l1_ssim":
+        l1_map = torch.mean(torch.abs(images - reconstructions), dim=1, keepdim=True)
+        ssim = torch.mean(compute_ssim_map(images, reconstructions), dim=1, keepdim=True)
+        return (1.0 - alpha) * l1_map + alpha * (1.0 - ssim)
     return torch.mean((images - reconstructions) ** 2, dim=1, keepdim=True)
 
 
