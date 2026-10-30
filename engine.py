@@ -47,7 +47,8 @@ def validate(model, dataloader, criterion, device):
     return total_loss / len(dataloader.dataset)
 
 
-def train(model, train_loader, val_loader, criterion, optimizer, epochs, device, save_dir="./experiments/baseline"):
+
+def train(model, train_loader, criterion, optimizer, epochs, device,val_loader = None, save_dir="./experiments/baseline"):
     save_path = Path(save_dir)
     save_path.mkdir(parents=True, exist_ok=True)
 
