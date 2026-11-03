@@ -5,9 +5,10 @@ I want this class to contain functions for training and testing a PyTorch model 
 import json
 from pathlib import Path
 import numpy as np
-from sklearn.metrics import roc_auc_score
 import torch
 from tqdm import tqdm
+from anomalib.metrics import AUROC, AUPRO
+from anomalib.data import ImageBatch
 
 from losses import compute_ssim_map
 
@@ -88,31 +89,36 @@ def compute_anomaly_map(images, reconstructions, method="l1_ssim", alpha=0.5):
 
 def evaluate(model, test_loader, device):
     model.eval()
-    all_image_scores, all_image_labels = [], []
-    all_pixel_scores, all_pixel_masks = [], []
 
-    with torch.no_grad():
+    image_auroc = AUROC(fields=["pred_score", "gt_label"])
+    pixel_auroc = AUROC(fields=["anomaly_map", "gt_mask"])
+    aupro = AUPRO(fields=["anomaly_map", "gt_mask"], fpr_limit=0.3)
+
+    with torch.inference_mode():
         for batch in tqdm(test_loader, desc="Evaluating", leave=False):
             images = batch["image"].to(device)
-            masks = batch["mask"]
-            labels = batch["label"]
+            masks = (batch["mask"] > 0.5).to(device)
+            labels = batch["label"].to(device).int()
 
             reconstructions = model(images)
             anomaly_maps = compute_anomaly_map(images, reconstructions)
-            image_scores = anomaly_maps.view(images.size(0), -1).max(dim=1)[0]
 
-            all_image_scores.append(image_scores.cpu().numpy())
-            all_image_labels.append(labels.numpy())
-            all_pixel_scores.append(anomaly_maps.cpu().numpy().ravel())
-            all_pixel_masks.append(masks.numpy().ravel())
+            image_scores = anomaly_maps.flatten(1).max(dim=1).values
 
-    image_scores = np.concatenate(all_image_scores)
-    image_labels = np.concatenate(all_image_labels)
-    pixel_scores = np.concatenate(all_pixel_scores)
-    pixel_masks = np.concatenate(all_pixel_masks).astype(int)
+            metric_batch = ImageBatch(
+                image=images,
+                pred_score=image_scores,
+                gt_label=labels,
+                anomaly_map=anomaly_maps,
+                gt_mask=masks,
+            )
 
-    image_auroc = roc_auc_score(image_labels, image_scores)
-    pixel_auroc = roc_auc_score(pixel_masks, pixel_scores)
+            image_auroc.update(metric_batch)
+            pixel_auroc.update(metric_batch)
+            aupro.update(metric_batch)
 
-    print(f"Evaluation -> Image AUROC: {image_auroc:.4f} | Pixel AUROC: {pixel_auroc:.4f}")
-    return {"image_auroc": float(image_auroc), "pixel_auroc": float(pixel_auroc)}
+    return {
+        "image_auroc": image_auroc.compute().item(),
+        "pixel_auroc": pixel_auroc.compute().item(),
+        "aupro": aupro.compute().item(),
+    }
