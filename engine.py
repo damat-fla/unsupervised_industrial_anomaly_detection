@@ -1,7 +1,3 @@
-'''
-Functions for training, validating, anomaly map extraction, and evaluation on anomaly detection datasets.
-'''
-
 import json
 from pathlib import Path
 import numpy as np
@@ -23,8 +19,8 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         images = batch["image"].to(device, non_blocking=True)
 
         optimizer.zero_grad()
-        outputs = model(images)
-        loss = criterion(outputs, images)
+        target, recon = model(images)
+        loss = criterion(target, recon)
         loss.backward()
         optimizer.step()
 
@@ -42,8 +38,8 @@ def validate(model, dataloader, criterion, device):
     with torch.no_grad():
         for batch in pbar:
             images = batch["image"].to(device)
-            outputs = model(images)
-            loss = criterion(outputs, images)
+            target, recon = model(images)
+            loss = criterion(target, recon)
 
             total_loss += loss.item() * images.size(0)
             pbar.set_postfix(loss=f"{loss.item():.4f}")
@@ -111,8 +107,8 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01):
             masks = (batch["mask"] > 0.5).to(device)
             labels = batch["label"].to(device).int()
 
-            reconstructions = model(images)
-            anomaly_maps = compute_anomaly_map(images, reconstructions)
+            target, reconstructions = model(images)
+            anomaly_maps = model.compute_anomaly_map(target, reconstructions)
 
             # Robust image score using top-k average anomaly pixels instead of pure max
             flat_maps = anomaly_maps.flatten(1)

@@ -116,7 +116,6 @@ class FeatureReconstructionModel(nn.Module):
         super().__init__()
         self.teacher = FeatureExtractor(model_name=backbone_name, layers=feature_layers)
         self.student = FeatureAutoencoder(in_channels=self.teacher.total_channels)
-        ...
 
     def forward(self, x):
         '''
@@ -129,39 +128,35 @@ class FeatureReconstructionModel(nn.Module):
         target_feat = target_feats['layer2']  # [B, C, H, W] 
         recon_feat = self.student(target_feat) # [B, C, H, W]
 
-        print(f"Target feature shape: {target_feat.shape}, Reconstructed feature shape: {recon_feat.shape}")
+        return target_feat, recon_feat
 
-        if self.training:
-            return target_feat, recon_feat
+    def compute_anomaly_map(
+        self,
+        target_feat: torch.Tensor, 
+        recon_feat: torch.Tensor, 
+        out_size: tuple[int, int] = (256, 256),
+        blur_sigma: float = 4.0
+    ) -> torch.Tensor:
+        """
+        Computes the anomaly map based on the cosine similarity between the target features and the reconstructed features.
+        """
+        # Copute cosine similarity between the target and reconstructed features along the channel dimension
+        cos_sim = F.cosine_similarity(target_feat, recon_feat, dim=1) # [B, H_feat, W_feat]
 
-        return compute_anomaly_map(target_feat, recon_feat)
+        # Compute the anomaly map as 1 - cosine similarity, and add a channel dimension
+        anomaly_map = (1.0 - cos_sim).unsqueeze(1)
 
-def compute_anomaly_map(
-    target_feat: torch.Tensor, 
-    recon_feat: torch.Tensor, 
-    out_size: tuple[int, int] = (256, 256),
-    blur_sigma: float = 4.0
-) -> torch.Tensor:
-    """
-    Computes the anomaly map based on the cosine similarity between the target features and the reconstructed features.
-    """
-    # Copute cosine similarity between the target and reconstructed features along the channel dimension
-    cos_sim = F.cosine_similarity(target_feat, recon_feat, dim=1) # [B, H_feat, W_feat]
+        # Resize the anomaly map to the original image size
+        anomaly_map = F.interpolate(anomaly_map, size=out_size, mode="bilinear", align_corners=False)
 
-    # Compute the anomaly map as 1 - cosine similarity, and add a channel dimension
-    anomaly_map = (1.0 - cos_sim).unsqueeze(1)
-
-    # Resize the anomaly map to the original image size
-    anomaly_map = F.interpolate(anomaly_map, size=out_size, mode="bilinear", align_corners=False)
-
-    # gaussian blur the anomaly map to smooth it out and reduce noise
-    # if blur_sigma is not None and blur_sigma > 0:
-    #     kernel_size = int(2 * round(2 * blur_sigma) + 1)
-    #     anomaly_map = gaussian_blur(
-    #         anomaly_map, 
-    #         kernel_size=[kernel_size, kernel_size], 
-    #         sigma=[blur_sigma, blur_sigma]
-    #    )
-    return anomaly_map
+        # gaussian blur the anomaly map to smooth it out and reduce noise
+        # if blur_sigma is not None and blur_sigma > 0:
+        #     kernel_size = int(2 * round(2 * blur_sigma) + 1)
+        #     anomaly_map = gaussian_blur(
+        #         anomaly_map, 
+        #         kernel_size=[kernel_size, kernel_size], 
+        #         sigma=[blur_sigma, blur_sigma]
+        #    )
+        return anomaly_map
 
 
