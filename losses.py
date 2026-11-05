@@ -27,3 +27,18 @@ class L1SSIMLoss(nn.Module):
         l1 = F.l1_loss(pred, target)
         ssim_val = structural_similarity_index_measure(pred, target, data_range=1.0)
         return (1.0 - self.alpha) * l1 + self.alpha * (1.0 - ssim_val)
+
+class CosineLoss(nn.Module):
+    """
+    Cosine similarity loss for feature reconstruction.
+    Computes 1 - cosine_similarity(pred, target) averaged over the batch.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        # Compute cosine similarity along the channel dimension (dim=1)
+        cos_sim = F.cosine_similarity(pred, target, dim=1)  # [B, H, W]
+        loss = torch.mean(1.0 - cos_sim)  # Average over batch and spatial dimensions
+        return loss
+
