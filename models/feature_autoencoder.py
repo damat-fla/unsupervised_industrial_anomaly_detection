@@ -125,7 +125,7 @@ class FeatureReconstructionModel(nn.Module):
 
         target_feats = self.teacher(x)
         # TODO: handle multiple feature layers by concatenating them along the channel dimension
-        target_feat = target_feats['layer2']  # [B, C, H, W] 
+        target_feat = target_feats['layer3']  # [B, C, H, W] 
         recon_feat = self.student(target_feat) # [B, C, H, W]
 
         return target_feat, recon_feat
@@ -150,13 +150,13 @@ class FeatureReconstructionModel(nn.Module):
         anomaly_map = F.interpolate(anomaly_map, size=out_size, mode="bilinear", align_corners=False)
 
         # gaussian blur the anomaly map to smooth it out and reduce noise
-        # if blur_sigma is not None and blur_sigma > 0:
-        #     kernel_size = int(2 * round(2 * blur_sigma) + 1)
-        #     anomaly_map = gaussian_blur(
-        #         anomaly_map, 
-        #         kernel_size=[kernel_size, kernel_size], 
-        #         sigma=[blur_sigma, blur_sigma]
-        #    )
+        if blur_sigma is not None and blur_sigma > 0:
+            kernel_size = int(2 * round(2 * blur_sigma) + 1)
+            anomaly_map = gaussian_blur(
+                anomaly_map, 
+                kernel_size=[kernel_size, kernel_size], 
+                sigma=[blur_sigma, blur_sigma]
+           )
         return anomaly_map
 
 
