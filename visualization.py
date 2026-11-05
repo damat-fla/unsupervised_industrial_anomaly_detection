@@ -22,9 +22,15 @@ def visualize_batch(batch, max_images=16, nrow=4, title="Training Batch", figsiz
     plt.show()
 
 
+import torch
+import matplotlib.pyplot as plt
+import numpy as np
+
+
 def visualize_anomalies(model, dataloader, device, num_samples=4):
     """
-    Plot Input, Reconstruction, Ground Truth, and Anomaly Map side by side for test samples.
+    Plot Input Image, Ground Truth, Anomaly Heatmap, and Heatmap Overlay for test samples.
+    Works natively with Feature Reconstruction Models.
     """
     model.eval()
     batch = next(iter(dataloader))
@@ -33,30 +39,44 @@ def visualize_anomalies(model, dataloader, device, num_samples=4):
     defect_types = batch["defect_type"][:num_samples]
 
     with torch.no_grad():
-        reconstructions = model(images)
-        anomaly_maps = compute_anomaly_map(images, reconstructions)
+        target, recon = model(images)
+        anomaly_maps = model.compute_anomaly_map(target, recon)
 
     images = images.cpu()
-    reconstructions = reconstructions.cpu()
+    masks = masks.cpu()
     anomaly_maps = anomaly_maps.cpu()
 
-    fig, axes = plt.subplots(num_samples, 4, figsize=(12, 3 * num_samples))
+    fig, axes = plt.subplots(num_samples, 4, figsize=(14, 3.5 * num_samples))
     if num_samples == 1:
-        axes = [axes]
+        axes = np.expand_dims(axes, axis=0)
 
-    titles = ["Input", "Reconstruction", "Ground Truth", "Anomaly Map"]
+    titles = ["Input Image", "Ground Truth", "Anomaly Map", "Overlay"]
+
     for i in range(num_samples):
-        axes[i][0].imshow(images[i].permute(1, 2, 0).numpy())
-        axes[i][0].set_ylabel(defect_types[i], fontsize=12)
-        axes[i][1].imshow(reconstructions[i].permute(1, 2, 0).numpy())
-        axes[i][2].imshow(masks[i, 0].numpy(), cmap="gray")
-        im = axes[i][3].imshow(anomaly_maps[i, 0].numpy(), cmap="jet")
-        plt.colorbar(im, ax=axes[i][3], fraction=0.046, pad=0.04)
+        # 1. Immagine RGB originale [H, W, 3] normalizzata in [0, 1]
+        img_rgb = images[i].permute(1, 2, 0).numpy()
+        img_rgb = np.clip(img_rgb, 0.0, 1.0)
+        axes[i][0].imshow(img_rgb)
+        axes[i][0].set_ylabel(defect_types[i], fontsize=11, fontweight="bold")
 
+        # 2. Ground Truth Mask [H, W]
+        axes[i][1].imshow(masks[i, 0].numpy(), cmap="gray", vmin=0, vmax=1)
+
+        # 3. Anomaly Heatmap [H, W]
+        heat_map = anomaly_maps[i, 0].numpy()
+        im = axes[i][2].imshow(heat_map, cmap="jet")
+        plt.colorbar(im, ax=axes[i][2], fraction=0.046, pad=0.04)
+
+        # 4. Overlay: Heatmap sovrapposta con trasparenza (alpha=0.45) sull'immagine RGB
+        axes[i][3].imshow(img_rgb)
+        axes[i][3].imshow(heat_map, cmap="jet", alpha=0.45)
+
+        # Titoli solo sulla prima riga
         if i == 0:
             for j in range(4):
-                axes[0][j].set_title(titles[j])
+                axes[0][j].set_title(titles[j], fontsize=12, pad=8)
 
+        # Rimuove i tick degli assi per una visualizzazione pulita
         for j in range(4):
             axes[i][j].set_xticks([])
             axes[i][j].set_yticks([])
