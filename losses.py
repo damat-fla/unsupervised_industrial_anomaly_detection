@@ -42,3 +42,14 @@ class CosineLoss(nn.Module):
         loss = torch.mean(1.0 - cos_sim)  # Average over batch and spatial dimensions
         return loss
 
+class MSELoss(nn.Module):
+    """
+    Mean Squared Error loss for feature reconstruction.
+    Computes the average squared difference between pred and target.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        return F.mse_loss(pred, target)
+
