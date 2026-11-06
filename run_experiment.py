@@ -36,7 +36,7 @@ def run_experiment_single_class(class_name: str, config: dict):
     train_dataset = MVTec2DDataset(
         transforms=transforms,
         split='train',
-        class_name=config['class_name'],
+        class_name=class_name
     )
 
     train_loader = torch.utils.data.DataLoader(
@@ -50,7 +50,7 @@ def run_experiment_single_class(class_name: str, config: dict):
     val_dataset = MVTec2DDataset(
         transforms=transforms,
         split='validation',
-        class_name=config['class_name']
+        class_name=class_name,
     )
 
     val_loader = torch.utils.data.DataLoader(
@@ -65,7 +65,7 @@ def run_experiment_single_class(class_name: str, config: dict):
         transforms=transforms,
         target_transforms=target_transforms,
         split='test',
-        class_name=config['class_name']
+        class_name=class_name,
     )
 
     test_loader = torch.utils.data.DataLoader(
