@@ -1,3 +1,5 @@
+from torchvision.transforms.v2.functional import gaussian_blur
+from losses import compute_ssim_map
 import torch.nn as nn
 import torch
 
@@ -233,4 +235,31 @@ class Autoencoder(nn.Module):
     def forward(self, x):
         z = self.encoder(x)
         x_recon = self.decoder(z)
-        return x_recon
+        return x_recon, x
+
+    def compute_anomaly_map(self, x, x_recon):
+        """
+        Computes anomaly map combining pixel L1 difference and (1 - SSIM) from torchmetrics,
+        with torchvision Gaussian smoothing to suppress pixel-level edge noise.
+        """
+        anomaly_map = ...
+
+        return anomaly_map
+
+    def compute_anomaly_map(self, reconstructions, images, method="l1_ssim", alpha=0.5, blur_sigma=4.0):
+        """
+        Computes anomaly map combining pixel L1 difference and (1 - SSIM) from torchmetrics,
+        with torchvision Gaussian smoothing to suppress pixel-level edge noise.
+        """
+        if method == "l1_ssim":
+            l1_map = torch.mean(torch.abs(images - reconstructions), dim=1, keepdim=True)
+            ssim_map = torch.mean(compute_ssim_map(images, reconstructions), dim=1, keepdim=True)
+            anomaly_map = (1.0 - alpha) * l1_map + alpha * (1.0 - ssim_map)
+        else:
+            anomaly_map = torch.mean((images - reconstructions) ** 2, dim=1, keepdim=True)
+
+        if blur_sigma is not None and blur_sigma > 0:
+            kernel_size = int(2 * round(2 * blur_sigma) + 1)
+            anomaly_map = gaussian_blur(anomaly_map, kernel_size=[kernel_size, kernel_size], sigma=[blur_sigma, blur_sigma])
+
+        return anomaly_map

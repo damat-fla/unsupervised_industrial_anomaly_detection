@@ -132,8 +132,8 @@ class FeatureReconstructionModel(nn.Module):
 
     def compute_anomaly_map(
         self,
-        target_feat: torch.Tensor, 
-        recon_feat: torch.Tensor, 
+        recon_feat: torch.Tensor,
+        target_feat: torch.Tensor,  
         out_size: tuple[int, int] = (256, 256),
         blur_sigma: float = 4.0
     ) -> torch.Tensor:
@@ -150,13 +150,13 @@ class FeatureReconstructionModel(nn.Module):
         anomaly_map = F.interpolate(anomaly_map, size=out_size, mode="bilinear", align_corners=False)
 
         # gaussian blur the anomaly map to smooth it out and reduce noise
-        if blur_sigma is not None and blur_sigma > 0:
-            kernel_size = int(2 * round(2 * blur_sigma) + 1)
-            anomaly_map = gaussian_blur(
-                anomaly_map, 
-                kernel_size=[kernel_size, kernel_size], 
-                sigma=[blur_sigma, blur_sigma]
-           )
+        # if blur_sigma is not None and blur_sigma > 0:
+        #     kernel_size = int(2 * round(2 * blur_sigma) + 1)
+        #     anomaly_map = gaussian_blur(
+        #         anomaly_map, 
+        #         kernel_size=[kernel_size, kernel_size], 
+        #         sigma=[blur_sigma, blur_sigma]
+        #    )
         return anomaly_map
 
 

@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import torch
 import torchvision.utils as vutils
 
-from engine import compute_anomaly_map
 
 
 def visualize_batch(batch, max_images=16, nrow=4, title="Training Batch", figsize=(8, 8)):

@@ -2,12 +2,9 @@ import json
 from pathlib import Path
 import numpy as np
 import torch
-from torchvision.transforms.v2.functional import gaussian_blur
 from tqdm import tqdm
 from anomalib.metrics import AUROC, AUPRO
 from anomalib.data import ImageBatch
-
-from losses import compute_ssim_map
 
 
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
@@ -19,8 +16,8 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         images = batch["image"].to(device, non_blocking=True)
 
         optimizer.zero_grad()
-        target, recon = model(images)
-        loss = criterion(target, recon)
+        pred, target = model(images)
+        loss = criterion(pred, target)
         loss.backward()
         optimizer.step()
 
@@ -38,8 +35,8 @@ def validate(model, dataloader, criterion, device):
     with torch.no_grad():
         for batch in pbar:
             images = batch["image"].to(device)
-            target, recon = model(images)
-            loss = criterion(target, recon)
+            pred, target = model(images)
+            loss = criterion(pred, target)
 
             total_loss += loss.item() * images.size(0)
             pbar.set_postfix(loss=f"{loss.item():.4f}")
@@ -75,25 +72,6 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
     return history
 
 
-def compute_anomaly_map(images, reconstructions, method="l1_ssim", alpha=0.5, blur_sigma=4.0):
-    """
-    Computes anomaly map combining pixel L1 difference and (1 - SSIM) from torchmetrics,
-    with torchvision Gaussian smoothing to suppress pixel-level edge noise.
-    """
-    if method == "l1_ssim":
-        l1_map = torch.mean(torch.abs(images - reconstructions), dim=1, keepdim=True)
-        ssim_map = torch.mean(compute_ssim_map(images, reconstructions), dim=1, keepdim=True)
-        anomaly_map = (1.0 - alpha) * l1_map + alpha * (1.0 - ssim_map)
-    else:
-        anomaly_map = torch.mean((images - reconstructions) ** 2, dim=1, keepdim=True)
-
-    if blur_sigma is not None and blur_sigma > 0:
-        kernel_size = int(2 * round(2 * blur_sigma) + 1)
-        anomaly_map = gaussian_blur(anomaly_map, kernel_size=[kernel_size, kernel_size], sigma=[blur_sigma, blur_sigma])
-
-    return anomaly_map
-
-
 def evaluate(model, test_loader, device, top_k_ratio=0.01):
     model.eval()
 
@@ -107,8 +85,8 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01):
             masks = (batch["mask"] > 0.5).to(device)
             labels = batch["label"].to(device).int()
 
-            target, reconstructions = model(images)
-            anomaly_maps = model.compute_anomaly_map(target, reconstructions)
+            pred, target = model(images)
+            anomaly_maps = model.compute_anomaly_map(pred, target)
 
             # Robust image score using top-k average anomaly pixels instead of pure max
             flat_maps = anomaly_maps.flatten(1)
