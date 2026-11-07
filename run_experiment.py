@@ -7,6 +7,7 @@ from engine import evaluate, train
 from pathlib import Path
 import torch
 import json
+import gc
 
 
 def build_dataloaders(class_name: str, config: dict):
@@ -32,7 +33,8 @@ def build_dataloaders(class_name: str, config: dict):
     train_dataset = MVTec2DDataset(
         transforms=transforms,
         split='train',
-        class_name=class_name
+        class_name=class_name,
+        cache=config.get('cache_data', False)  # Use caching if specified in config
     )
 
     train_loader = torch.utils.data.DataLoader(
@@ -47,6 +49,7 @@ def build_dataloaders(class_name: str, config: dict):
         transforms=transforms,
         split='validation',
         class_name=class_name,
+        cache=config.get('cache_data', False)  # Use caching if specified in config
     )
 
     val_loader = torch.utils.data.DataLoader(
@@ -139,6 +142,10 @@ def run_experiment_single_class(class_name: str, config: dict):
     model.load_state_dict(torch.load(best_model_path))
     
     metrics = evaluate(model, test_loader, DEVICE, save_dir=out_dir)
- 
+
+    del model, train_loader, val_loader, test_loader, optimizer, criterion
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
         
     return history, metrics
