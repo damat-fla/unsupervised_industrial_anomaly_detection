@@ -36,6 +36,7 @@ def visualize_anomalies(model, dataloader, device, num_samples=4, visualize_reco
     images = batch["image"][:num_samples].to(device)
     masks = batch["mask"][:num_samples]
     defect_types = batch["defect_type"][:num_samples]
+    image_names = batch["path"][:num_samples]
 
     with torch.no_grad():
         recon, target = model(images)
@@ -60,7 +61,7 @@ def visualize_anomalies(model, dataloader, device, num_samples=4, visualize_reco
         img_rgb = images[i].permute(1, 2, 0).numpy()
         img_rgb = np.clip(img_rgb, 0.0, 1.0)
         axes[i][0].imshow(img_rgb)
-        axes[i][0].set_ylabel(defect_types[i], fontsize=11, fontweight="bold")
+        axes[i][0].set_ylabel(f"{defect_types[i]}\n{image_names[i].split('\\')[-1]}", fontsize=11, fontweight="bold")
 
         # 2. Ground Truth Mask [H, W]
         axes[i][1].imshow(masks[i, 0].numpy(), cmap="gray", vmin=0, vmax=1)
