@@ -48,9 +48,13 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
     save_path = Path(save_dir)
     save_path.mkdir(parents=True, exist_ok=True)
 
+    # Create a directory for checkpoints
+    (save_path / "checkpoints").mkdir(parents=True, exist_ok=True)
+
     best_val_loss = float("inf")
+    best_epoch = 1
     patience_counter = 0
-    history = {"train_loss": [], "val_loss": []}
+    history = {"train_loss": [], "val_loss": [], "epochs_trained": 0, "best_epoch": 1}
 
     for epoch in range(1, epochs + 1):
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device)
@@ -58,17 +62,20 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
 
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
+        history["epochs_trained"] = epoch
 
         print(f"Epoch [{epoch:03d}/{epochs:03d}] | Train Loss: {train_loss:.5f} | Val Loss: {val_loss:.5f}")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            best_epoch = epoch
+            history["best_epoch"] = best_epoch
             patience_counter = 0
-            torch.save(model.state_dict(), save_path / "best_model.pth")
+            torch.save(model.state_dict(), save_path / "checkpoints" / "best_model.pth")
         else:
             patience_counter += 1
 
-        torch.save(model.state_dict(), save_path / "last_model.pth")
+        torch.save(model.state_dict(), save_path / "checkpoints" / f"last_model.pth")
 
         with open(save_path / "history.json", "w") as f:
             json.dump(history, f, indent=2)
@@ -80,7 +87,7 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
     return history
 
 
-def evaluate(model, test_loader, device, top_k_ratio=0.01):
+def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experiments/baseline"):
     model.eval()
 
     image_auroc = AUROC(fields=["pred_score", "gt_label"])
@@ -113,8 +120,16 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01):
             pixel_auroc.update(metric_batch)
             aupro.update(metric_batch)
 
-    return {
+    metrics = {
         "image_auroc": image_auroc.compute().item(),
         "pixel_auroc": pixel_auroc.compute().item(),
         "aupro": aupro.compute().item(),
     }
+
+    if save_dir:
+        save_path = Path(save_dir)
+        save_path.mkdir(parents=True, exist_ok=True)
+        with open(save_path / "metrics.json", "w") as f:
+            json.dump(metrics, f, indent=2)
+
+    return metrics

@@ -6,6 +6,7 @@ from dataset import MVTec2DDataset
 from engine import evaluate, train
 from pathlib import Path
 import torch
+import json
 
 
 def run_experiment_single_class(class_name: str, config: dict):
@@ -98,6 +99,12 @@ def run_experiment_single_class(class_name: str, config: dict):
     out_dir = Path(config['output_dir']) / config['experiment_name'] / class_name
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    config_file = Path(config['output_dir']) / config['experiment_name'] / "config.json"
+    if not config_file.exists():
+        with open(config_file, "w") as f:
+            json.dump(config, f, indent=2, default=lambda o: getattr(o, "__name__", str(o)))
+
+
     print(f"Training {config['model_name']} for class '{class_name}' on device: {DEVICE}")
     history = train(
         model=model,
@@ -114,10 +121,10 @@ def run_experiment_single_class(class_name: str, config: dict):
 
     # ================== EVALUATION ==================
     # Load the best model for evaluation
-    best_model_path = out_dir / "best_model.pth"
+    best_model_path = out_dir / "checkpoints" / "best_model.pth"
     model.load_state_dict(torch.load(best_model_path))
     
-    metrics = evaluate(model, test_loader, DEVICE)
+    metrics = evaluate(model, test_loader, DEVICE, save_dir=out_dir)
  
         
     return history, metrics
