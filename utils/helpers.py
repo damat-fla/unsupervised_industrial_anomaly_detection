@@ -30,8 +30,6 @@ def get_device(device_name: str = None):
         device = torch.device(device_name)
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    print(f"Using device: {device}.")
     return device
 
 

@@ -1,7 +1,7 @@
 from models.feature_autoencoder import FeatureReconstructionModel
-from utils.helpers import set_seed, get_device
 from models.pixel_autoencoder import Autoencoder
 from torchvision.transforms import v2
+from utils.helpers import get_device
 from dataset import MVTec2DDataset
 from engine import evaluate, train
 from pathlib import Path
@@ -9,14 +9,9 @@ import torch
 import json
 
 
-def run_experiment_single_class(class_name: str, config: dict):
-    print(f"\n{'='*30}\n  Starting class: {class_name.upper()}\n{'='*30}")
-
-    set_seed(config['seed'])
-    DEVICE = get_device()
-
+def build_dataloaders(class_name: str, config: dict):
     # ================== TRANSFORMS ==================
-
+    
     # define transforms for the dataset
     transforms = v2.Compose([
         v2.Resize(config['img_size']),
@@ -76,20 +71,39 @@ def run_experiment_single_class(class_name: str, config: dict):
         num_workers=config['num_workers'],
         pin_memory=True,
     )
+    return train_loader, val_loader, test_loader
 
-    # ================== MODEL ==================
+
+def build_model(config: dict, device: torch.device, checkpoint_path=None):
     if config['model_name'] == 'FeatureReconstructionModel':
         model = FeatureReconstructionModel(
             backbone_name=config['backbone_name'], 
             feature_layers=config['feature_layers']
-        ).to(DEVICE)
+        ).to(device)
     elif config['model_name'] == 'Autoencoder':
         model = Autoencoder(
             in_channels=3, 
             base_channels=config['base_channels']
-        ).to(DEVICE)
+        ).to(device)
     else:
         raise ValueError(f"Unknown model name: {config['model_name']}")
+
+    if checkpoint_path:
+        model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+        print(f"Loaded model weights from {checkpoint_path}")
+    return model
+
+def run_experiment_single_class(class_name: str, config: dict):
+    print(f"\n{'='*30}  Starting class: {class_name.upper()}  {'='*30}")
+
+    DEVICE = get_device(config['device'])
+
+    # ================== DATA AND DATALOADERS ==================
+    train_loader, val_loader, test_loader = build_dataloaders(class_name, config)
+    
+
+    # ================== MODEL ==================
+    model = build_model(config, DEVICE)
 
     # ================== LOSS, OPTIMIZER ==================
     criterion = config['loss_fn']()
