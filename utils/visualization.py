@@ -26,10 +26,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def visualize_anomalies(model, dataloader, device, num_samples=4):
+def visualize_anomalies(model, dataloader, device, num_samples=4, visualize_reconstruction=False):
     """
-    Plot Input Image, Ground Truth, Anomaly Heatmap, and Heatmap Overlay for test samples.
-    Works natively with Feature Reconstruction Models.
+    Plot Input Image, Ground Truth, Anomaly Heatmap, Heatmap Overlay,
+    and optionally Reconstruction for test samples.
     """
     model.eval()
     batch = next(iter(dataloader))
@@ -38,18 +38,22 @@ def visualize_anomalies(model, dataloader, device, num_samples=4):
     defect_types = batch["defect_type"][:num_samples]
 
     with torch.no_grad():
-        target, recon = model(images)
-        anomaly_maps = model.compute_anomaly_map(target, recon)
+        recon, target = model(images)
+        anomaly_maps = model.compute_anomaly_map(recon, target)
 
     images = images.cpu()
     masks = masks.cpu()
     anomaly_maps = anomaly_maps.cpu()
-
-    fig, axes = plt.subplots(num_samples, 4, figsize=(14, 3.5 * num_samples))
-    if num_samples == 1:
-        axes = np.expand_dims(axes, axis=0)
+    recon = recon.cpu()
 
     titles = ["Input Image", "Ground Truth", "Anomaly Map", "Overlay"]
+    if visualize_reconstruction:
+        titles.append("Reconstruction")
+
+    ncols = len(titles)
+    fig, axes = plt.subplots(num_samples, ncols, figsize=(3.5 * ncols, 3.5 * num_samples))
+    if num_samples == 1:
+        axes = np.expand_dims(axes, axis=0)
 
     for i in range(num_samples):
         # 1. Immagine RGB originale [H, W, 3] normalizzata in [0, 1]
@@ -70,13 +74,18 @@ def visualize_anomalies(model, dataloader, device, num_samples=4):
         axes[i][3].imshow(img_rgb)
         axes[i][3].imshow(heat_map, cmap="jet", alpha=0.45)
 
+        # 5. Reconstruction (opzionale)
+        if visualize_reconstruction:
+            recon_rgb = np.clip(recon[i].permute(1, 2, 0).numpy(), 0.0, 1.0)
+            axes[i][4].imshow(recon_rgb)
+
         # Titoli solo sulla prima riga
         if i == 0:
-            for j in range(4):
+            for j in range(ncols):
                 axes[0][j].set_title(titles[j], fontsize=12, pad=8)
 
         # Rimuove i tick degli assi per una visualizzazione pulita
-        for j in range(4):
+        for j in range(ncols):
             axes[i][j].set_xticks([])
             axes[i][j].set_yticks([])
 
