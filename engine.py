@@ -10,9 +10,8 @@ from anomalib.data import ImageBatch
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
     total_loss = 0.0
-    pbar = tqdm(dataloader, desc="Train", leave=False)
 
-    for batch in pbar:
+    for batch in dataloader:
         images = batch["image"].to(device, non_blocking=True)
 
         optimizer.zero_grad()
@@ -22,7 +21,6 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         optimizer.step()
 
         total_loss += loss.item() * images.size(0)
-        pbar.set_postfix(loss=f"{loss.item():.4f}")
 
     return total_loss / len(dataloader.dataset)
 
@@ -30,16 +28,13 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
 def validate(model, dataloader, criterion, device):
     model.eval()
     total_loss = 0.0
-    pbar = tqdm(dataloader, desc="Val", leave=False)
 
     with torch.no_grad():
-        for batch in pbar:
+        for batch in dataloader:
             images = batch["image"].to(device)
             pred, target = model(images)
             loss = criterion(pred, target)
-
             total_loss += loss.item() * images.size(0)
-            pbar.set_postfix(loss=f"{loss.item():.4f}")
 
     return total_loss / len(dataloader.dataset)
 
@@ -56,7 +51,8 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
     patience_counter = 0
     history = {"train_loss": [], "val_loss": [], "epochs_trained": 0, "best_epoch": 1}
 
-    for epoch in range(1, epochs + 1):
+    pbar = tqdm(range(1, epochs + 1), desc="Training")
+    for epoch in pbar:
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device)
         val_loss = validate(model, val_loader, criterion, device) if val_loader else train_loss
 
@@ -64,7 +60,7 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
         history["val_loss"].append(val_loss)
         history["epochs_trained"] = epoch
 
-        print(f"Epoch [{epoch:03d}/{epochs:03d}] | Train Loss: {train_loss:.5f} | Val Loss: {val_loss:.5f}")
+        pbar.set_postfix(train_loss=f"{train_loss:.4f}", val_loss=f"{val_loss:.4f}")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -75,13 +71,13 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
         else:
             patience_counter += 1
 
-        torch.save(model.state_dict(), save_path / "checkpoints" / f"last_model.pth")
+        torch.save(model.state_dict(), save_path / "checkpoints" / "last_model.pth")
 
         with open(save_path / "history.json", "w") as f:
             json.dump(history, f, indent=2)
 
         if patience and patience_counter >= patience:
-            print(f"Early stopping triggered at epoch {epoch}")
+            pbar.write(f"Early stopping triggered at epoch {epoch}")
             break
 
     return history
@@ -95,7 +91,7 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experimen
     aupro = AUPRO(fields=["anomaly_map", "gt_mask"], fpr_limit=0.3)
 
     with torch.inference_mode():
-        for batch in tqdm(test_loader, desc="Evaluating", leave=False):
+        for batch in tqdm(test_loader, desc="Evaluating", leave=True):
             images = batch["image"].to(device)
             masks = (batch["mask"] > 0.5).to(device)
             labels = batch["label"].to(device).int()

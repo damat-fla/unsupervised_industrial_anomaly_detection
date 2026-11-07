@@ -70,7 +70,7 @@ def build_dataloaders(class_name: str, config: dict):
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
         batch_size=config['batch_size'],
-        shuffle=False,
+        shuffle=True,
         num_workers=config['num_workers'],
         pin_memory=True,
     )
