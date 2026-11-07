@@ -106,6 +106,7 @@ def run_experiment_single_class(class_name: str, config: dict):
         criterion=criterion,
         optimizer=optimizer,
         epochs=config['num_epochs'],
+        patience=config['patience'],
         device=DEVICE,
         save_dir=out_dir,
     )

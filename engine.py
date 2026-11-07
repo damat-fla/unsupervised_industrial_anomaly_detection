@@ -44,11 +44,12 @@ def validate(model, dataloader, criterion, device):
     return total_loss / len(dataloader.dataset)
 
 
-def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=None, save_dir="./experiments/baseline"):
+def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=None, save_dir="./experiments/baseline", patience=None):
     save_path = Path(save_dir)
     save_path.mkdir(parents=True, exist_ok=True)
 
     best_val_loss = float("inf")
+    patience_counter = 0
     history = {"train_loss": [], "val_loss": []}
 
     for epoch in range(1, epochs + 1):
@@ -62,12 +63,19 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            patience_counter = 0
             torch.save(model.state_dict(), save_path / "best_model.pth")
+        else:
+            patience_counter += 1
 
         torch.save(model.state_dict(), save_path / "last_model.pth")
 
         with open(save_path / "history.json", "w") as f:
             json.dump(history, f, indent=2)
+
+        if patience and patience_counter >= patience:
+            print(f"Early stopping triggered at epoch {epoch}")
+            break
 
     return history
 
