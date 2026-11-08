@@ -1,0 +1,20 @@
+{
+  "experiment_name": "bottleneck512",
+  "device": "cuda",
+  "num_workers": 0,
+  "seed": 42,
+  "cache_data": true,
+  "img_size": [
+    256,
+    256
+  ],
+  "batch_size": 16,
+  "loss_fn": "L1SSIMLoss",
+  "learning_rate": 0.001,
+  "patience": 7,
+  "model_name": "Autoencoder",
+  "base_channels": 16,
+  "num_epochs": 70,
+  "output_dir": "./experiments/pixel_reconstruction",
+  "latent_dim": 512
+}
