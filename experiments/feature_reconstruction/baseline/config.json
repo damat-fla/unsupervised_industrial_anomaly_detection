@@ -1,0 +1,20 @@
+{
+  "experiment_name": "prova_baseline",
+  "device": "cuda",
+  "num_workers": 0,
+  "seed": 42,
+  "img_size": [
+    256,
+    256
+  ],
+  "batch_size": 16,
+  "loss_fn": "CosineLoss",
+  "learning_rate": 0.001,
+  "model_name": "FeatureReconstructionModel",
+  "backbone_name": "resnet18",
+  "feature_layers": [
+    "layer3"
+  ],
+  "num_epochs": 20,
+  "output_dir": "./experiments/feature_reconstruction"
+}
