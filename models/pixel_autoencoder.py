@@ -17,7 +17,7 @@ class ConvEncoderBlock(nn.Module):
             nn.LeakyReLU(0.1, inplace=True),
         )
 
-        print("Using standard encoder block")
+
 
     def forward(self, x):
         return self.block(x)

@@ -43,6 +43,7 @@ def build_dataloaders(class_name: str, config: dict):
         shuffle=True,
         num_workers=config['num_workers'],
         pin_memory=True,
+        drop_last=True 
     )
 
     val_dataset = MVTec2DDataset(
@@ -58,6 +59,7 @@ def build_dataloaders(class_name: str, config: dict):
         shuffle=False,
         num_workers=config['num_workers'],
         pin_memory=True,
+        drop_last=True
     )
 
     test_dataset = MVTec2DDataset(
