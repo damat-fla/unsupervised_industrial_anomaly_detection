@@ -7,7 +7,6 @@ It contains 10 different classes of objects. Data are stored in the folder ./dat
 but of course the code should support all classes.
 '''
 
-from linecache import cache
 from pathlib import Path
 from PIL import Image
 import torch

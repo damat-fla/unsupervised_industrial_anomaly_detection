@@ -1,7 +1,7 @@
 from models.feature_autoencoder import FeatureReconstructionModel
 from models.pixel_autoencoder import Autoencoder
 from torchvision.transforms import v2
-from utils.helpers import get_device
+from utils.helpers import get_device, set_seed
 from dataset import MVTec2DDataset
 from engine import evaluate, train
 from pathlib import Path
@@ -59,7 +59,7 @@ def build_dataloaders(class_name: str, config: dict):
         shuffle=False,
         num_workers=config['num_workers'],
         pin_memory=True,
-        drop_last=True
+        drop_last=False
     )
 
     test_dataset = MVTec2DDataset(
@@ -103,6 +103,7 @@ def build_model(config: dict, device: torch.device, checkpoint_path=None):
 def run_experiment_single_class(class_name: str, config: dict):
     print(f"\n{'='*30}  Starting class: {class_name.upper()}  {'='*30}")
 
+    set_seed(config['seed'])
     DEVICE = get_device(config['device'])
 
     # ================== DATA AND DATALOADERS ==================
@@ -143,7 +144,7 @@ def run_experiment_single_class(class_name: str, config: dict):
     # ================== EVALUATION ==================
     # Load the best model for evaluation
     best_model_path = out_dir / "checkpoints" / "best_model.pth"
-    model.load_state_dict(torch.load(best_model_path))
+    model.load_state_dict(torch.load(best_model_path, map_location=DEVICE))
     
     metrics = evaluate(model, test_loader, DEVICE, save_dir=out_dir)
 
