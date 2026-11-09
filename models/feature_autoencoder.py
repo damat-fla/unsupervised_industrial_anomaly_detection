@@ -1,9 +1,13 @@
 from torchvision.models import resnet18, resnet50, ResNet18_Weights, ResNet50_Weights
 from torchvision.models.feature_extraction import create_feature_extractor
-from torchvision.transforms.v2.functional import gaussian_blur
+from torchvision.transforms.v2.functional import gaussian_blur, normalize
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
+
+# Statistics used to normalize the inputs of torchvision ImageNet-pretrained backbones
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
 
 class EncoderBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=2, padding=1):
@@ -68,7 +72,7 @@ class FeatureExtractor(nn.Module):
 
         self.eval()
 
-    def train(self):
+    def train(self, mode: bool = True):
         # The teacher is frozen: always keep it in eval mode, even when the parent model
         # calls model.train(). Otherwise BatchNorm layers would normalize with batch
         # statistics and update their running_mean/var during training.
@@ -76,7 +80,11 @@ class FeatureExtractor(nn.Module):
         return super().train(False)
 
     def forward(self, x):
+        # x: images in [0, 1], shape [B, 3, H, W].
+        # ImageNet normalization is applied here (not in the dataset transforms), so the
+        # dataset stays in [0, 1], shared with the pixel autoencoder and the visualizations.
         with torch.no_grad():
+            x = normalize(x, mean=IMAGENET_MEAN, std=IMAGENET_STD)
             features = self.feature_extractor(x)
         return features
 
@@ -109,7 +117,7 @@ class FeatureAutoencoder(nn.Module):
 # Feature Reconstruction Model: combines the teacher and student for end-to-end training
 class FeatureReconstructionModel(nn.Module):
 
-    def __init__(self, backbone_name: str = "resnet18", feature_layers: list[str] = ["layer2"]):
+    def __init__(self, backbone_name: str = "resnet18", feature_layers: list[str] = ["layer2"], img_size: int = 256):
         '''
             A teacher-student model for feature reconstruction. The teacher is a pretrained feature extractor 
             (e.g., ResNet-18), and the student is a feature autoencoder that learns to reconstruct the features 
@@ -121,10 +129,13 @@ class FeatureReconstructionModel(nn.Module):
                 name of the pretrained model to use as the teacher.
             - feature_layers: 
                 list of str, names of the layers from which to extract features.
+            - img_size: int,
+                size of the input images (assumed to be square) for upsampling the anomaly maps.
         '''
         super().__init__()
         self.teacher = FeatureExtractor(model_name=backbone_name, layers=feature_layers)
         self.student = FeatureAutoencoder(in_channels=self.teacher.total_channels)
+        self.img_size = img_size  # anomaly maps are upsampled to the input image size
 
     def forward(self, x):
         '''
@@ -132,18 +143,20 @@ class FeatureReconstructionModel(nn.Module):
         At inference time returns the anomaly map computed by cosine similarity between the teacher and student features.
         '''
 
-        target_feats = self.teacher(x)
-        # TODO: handle multiple feature layers by concatenating them along the channel dimension
-        target_feat = target_feats['layer3']  # [B, C, H, W] 
-        recon_feat = self.student(target_feat) # [B, C, H, W]
+        feats = list(self.teacher(x).values())
+        size = max(f.shape[-2:] for f in feats)  # highest resolution among the selected layers
+        # Upsample every layer to the same resolution and concatenate along the channel dimension
+        target_feat = torch.cat(
+            [F.interpolate(f, size=size, mode="bilinear", align_corners=False) for f in feats], dim=1
+        )  # [B, total_channels, H, W]
+        recon_feat = self.student(target_feat)  # [B, total_channels, H, W]
 
         return recon_feat, target_feat
 
     def compute_anomaly_map(
         self,
         recon_feat: torch.Tensor,
-        target_feat: torch.Tensor,  
-        out_size: tuple[int, int] = (256, 256),
+        target_feat: torch.Tensor,
         blur_sigma: float = 4.0
     ) -> torch.Tensor:
         """
@@ -156,7 +169,7 @@ class FeatureReconstructionModel(nn.Module):
         anomaly_map = (1.0 - cos_sim).unsqueeze(1)
 
         # Resize the anomaly map to the original image size
-        anomaly_map = F.interpolate(anomaly_map, size=out_size, mode="bilinear", align_corners=False)
+        anomaly_map = F.interpolate(anomaly_map, size=(self.img_size, self.img_size), mode="bilinear", align_corners=False)
 
         # gaussian blur the anomaly map to smooth it out and reduce noise
         # if blur_sigma is not None and blur_sigma > 0:

@@ -83,7 +83,8 @@ def build_model(config: dict, device: torch.device, checkpoint_path=None):
     if config['model_name'] == 'FeatureReconstructionModel':
         model = FeatureReconstructionModel(
             backbone_name=config['backbone_name'], 
-            feature_layers=config['feature_layers']
+            feature_layers=config['feature_layers'],
+            img_size=config['img_size'][0],
         ).to(device)
     elif config['model_name'] == 'Autoencoder':
         model = Autoencoder(
