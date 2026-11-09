@@ -124,9 +124,8 @@ def run_experiment_single_class(class_name: str, config: dict):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     config_file = Path(config['output_dir']) / config['experiment_name'] / "config.json"
-    if not config_file.exists():
-        with open(config_file, "w") as f:
-            json.dump(config, f, indent=2, default=lambda o: getattr(o, "__name__", str(o)))
+    with open(config_file, "w") as f:
+        json.dump(config, f, indent=2, default=lambda o: getattr(o, "__name__", str(o)))
 
 
     print(f"Training {config['model_name']} for class '{class_name}' on device: {DEVICE}")

@@ -15,6 +15,7 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
     # model to keep the teacher in eval mode.
 
     total_loss = 0.0
+    n_samples = 0  # samples actually processed (drop_last=True may skip the last incomplete batch)
 
     for batch in dataloader:
         images = batch["image"].to(device, non_blocking=True)
@@ -26,8 +27,9 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         optimizer.step()
 
         total_loss += loss.item() * images.size(0)
+        n_samples += images.size(0)
 
-    return total_loss / len(dataloader.dataset)
+    return total_loss / n_samples
 
 
 def validate(model, dataloader, criterion, device):
