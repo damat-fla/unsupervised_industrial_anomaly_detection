@@ -1,5 +1,5 @@
 {
-  "experiment_name": "best_pixel_reconstruction_",
+  "experiment_name": "combined_residual_linear_",
   "device": "cuda",
   "num_workers": 0,
   "seed": 42,
