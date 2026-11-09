@@ -21,22 +21,34 @@ def visualize_batch(batch, max_images=16, nrow=4, title="Training Batch", figsiz
     plt.show()
 
 
-import torch
-import matplotlib.pyplot as plt
+import random
 import numpy as np
+from torch.utils.data import default_collate
 
 
-def visualize_anomalies(model, dataloader, device, num_samples=4, visualize_reconstruction=False):
+def visualize_anomalies(model, dataloader, device, visualize_reconstruction=False, indices=None):
     """
     Plot Input Image, Ground Truth, Anomaly Heatmap, Heatmap Overlay,
     and optionally Reconstruction for test samples.
+
+    Samples are taken directly from `dataloader.dataset`, so the result does not
+    depend on the loader's shuffling.
+    - indices: optional list of dataset indices to visualize. If None, `num_samples`
+      random indices are drawn, so each call shows different samples.
     """
     model.eval()
-    batch = next(iter(dataloader))
-    images = batch["image"][:num_samples].to(device)
-    masks = batch["mask"][:num_samples]
-    defect_types = batch["defect_type"][:num_samples]
-    image_names = batch["path"][:num_samples]
+    dataset = dataloader.dataset
+
+    if indices is None:
+        indices = random.sample(range(len(dataset)), k=min(8, len(dataset))) # 8 random samples if not specified
+    indices = list(indices)
+    num_samples = len(indices)
+
+    batch = default_collate([dataset[i] for i in indices])
+    images = batch["image"].to(device)
+    masks = batch["mask"]
+    defect_types = batch["defect_type"]
+    image_names = batch["path"]
 
     with torch.no_grad():
         recon, target = model(images)
