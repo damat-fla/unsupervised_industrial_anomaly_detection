@@ -9,6 +9,11 @@ from anomalib.data import ImageBatch
 
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
+    # Pay attenton when using model.train(). It recursively sets all submodules to training mode.
+    # Since my model contains the teacher (which I want to be frozen), I should ensure that it is 
+    # not affected by model.train(). To do so, it suffices to override the train() method of the 
+    # model to keep the teacher in eval mode.
+
     total_loss = 0.0
 
     for batch in dataloader:

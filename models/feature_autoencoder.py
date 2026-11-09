@@ -66,6 +66,15 @@ class FeatureExtractor(nn.Module):
             self.out_channels = {k: v.shape[1] for k, v in dummy_out.items()}
             self.total_channels = sum(self.out_channels.values())
 
+        self.eval()
+
+    def train(self):
+        # The teacher is frozen: always keep it in eval mode, even when the parent model
+        # calls model.train(). Otherwise BatchNorm layers would normalize with batch
+        # statistics and update their running_mean/var during training.
+        # requires_grad=False only stops gradient updates, not BatchNorm buffer updates.
+        return super().train(False)
+
     def forward(self, x):
         with torch.no_grad():
             features = self.feature_extractor(x)
@@ -128,7 +137,7 @@ class FeatureReconstructionModel(nn.Module):
         target_feat = target_feats['layer3']  # [B, C, H, W] 
         recon_feat = self.student(target_feat) # [B, C, H, W]
 
-        return target_feat, recon_feat
+        return recon_feat, target_feat
 
     def compute_anomaly_map(
         self,
