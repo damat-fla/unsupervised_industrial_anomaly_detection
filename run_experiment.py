@@ -90,7 +90,8 @@ def build_model(config: dict, device: torch.device, checkpoint_path=None):
             in_channels=3, 
             base_channels=config['base_channels'],
             latent_dim=config.get('latent_dim', None),
-            block_type=config.get('block_type', 'conv')  # Default to 'conv' if not specified
+            block_type=config.get('block_type', 'conv'),  # Default to 'conv' if not specified
+            img_size=config['img_size'][0],
         ).to(device)
     else:
         raise ValueError(f"Unknown model name: {config['model_name']}")

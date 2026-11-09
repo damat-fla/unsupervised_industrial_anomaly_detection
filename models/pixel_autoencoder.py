@@ -106,7 +106,7 @@ class LinearBottleneck(nn.Module):
 
 
 class Autoencoder(nn.Module):
-    def __init__(self, in_channels=3, base_channels=32, latent_dim=None, block_type="conv"):
+    def __init__(self, in_channels=3, base_channels=32, latent_dim=None, block_type="conv", img_size=256):
         super().__init__()
 
         c1 = base_channels
@@ -144,7 +144,7 @@ class Autoencoder(nn.Module):
             self.bottleneck = LinearBottleneck(
                 channels=c1 * 8, 
                 latent_dim=latent_dim,
-                spatial_size=16
+                spatial_size=img_size // 16  # 4 stride-2 encoder blocks
             )
         else:
             self.bottleneck = nn.Identity()

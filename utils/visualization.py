@@ -33,8 +33,8 @@ def visualize_anomalies(model, dataloader, device, visualize_reconstruction=Fals
 
     Samples are taken directly from `dataloader.dataset`, so the result does not
     depend on the loader's shuffling.
-    - indices: optional list of dataset indices to visualize. If None, `num_samples`
-      random indices are drawn, so each call shows different samples.
+    - indices: optional list of dataset indices to visualize. If None, 8 random
+      indices are drawn, so each call shows different samples.
     """
     model.eval()
     dataset = dataloader.dataset
