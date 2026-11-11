@@ -13,6 +13,20 @@ def compute_ssim_map(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     return ssim_map
 
 
+def cosine_distance_map(pred: torch.Tensor, target: torch.Tensor, channels_per_layer: list[int] | None = None) -> torch.Tensor:
+    """
+    Compute 1 - cosine similarity along the channel dimension. Returns a tensor of shape (B, H, W).
+    - channels_per_layer: if None, a single cosine is computed on all channels (layers concatenated).
+      Otherwise the channels are split per layer (e.g. [128, 256]), one cosine is computed for each
+      layer and the per-layer distances are averaged, so that every layer has the same weight.
+    """
+    if channels_per_layer is None:
+        return 1.0 - F.cosine_similarity(pred, target, dim=1)
+    layer_pairs = zip(pred.split(channels_per_layer, dim=1), target.split(channels_per_layer, dim=1))
+    distances = [1.0 - F.cosine_similarity(p, t, dim=1) for p, t in layer_pairs]
+    return torch.stack(distances).mean(dim=0)
+
+
 class L1SSIMLoss(nn.Module):
     """
     Combined L1 + SSIM loss widely used for MVTec-AD anomaly detection:
@@ -31,16 +45,15 @@ class L1SSIMLoss(nn.Module):
 class CosineLoss(nn.Module):
     """
     Cosine similarity loss for feature reconstruction.
-    Computes 1 - cosine_similarity(pred, target) averaged over the batch.
+    Computes 1 - cosine_similarity(pred, target) averaged over batch and spatial dimensions.
+    - channels_per_layer: if given, the cosine is computed per layer and averaged (see cosine_distance_map).
     """
-    def __init__(self):
+    def __init__(self, channels_per_layer: list[int] | None = None):
         super().__init__()
+        self.channels_per_layer = channels_per_layer
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        # Compute cosine similarity along the channel dimension (dim=1)
-        cos_sim = F.cosine_similarity(pred, target, dim=1)  # [B, H, W]
-        loss = torch.mean(1.0 - cos_sim)  # Average over batch and spatial dimensions
-        return loss
+        return cosine_distance_map(pred, target, self.channels_per_layer).mean()
 
 class MSELoss(nn.Module):
     """

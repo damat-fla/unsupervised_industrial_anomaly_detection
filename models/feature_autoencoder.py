@@ -1,6 +1,7 @@
 from torchvision.models import resnet18, resnet50, ResNet18_Weights, ResNet50_Weights
 from torchvision.models.feature_extraction import create_feature_extractor
 from torchvision.transforms.v2.functional import gaussian_blur, normalize
+from losses import cosine_distance_map
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
@@ -117,7 +118,8 @@ class FeatureAutoencoder(nn.Module):
 # Feature Reconstruction Model: combines the teacher and student for end-to-end training
 class FeatureReconstructionModel(nn.Module):
 
-    def __init__(self, backbone_name: str = "resnet18", feature_layers: list[str] = ["layer2"], img_size: int = 256):
+    def __init__(self, backbone_name: str = "resnet18", feature_layers: list[str] = ["layer2"], img_size: int = 256,
+                 per_layer_cosine: bool = False):
         '''
             A teacher-student model for feature reconstruction. The teacher is a pretrained feature extractor 
             (e.g., ResNet-18), and the student is a feature autoencoder that learns to reconstruct the features 
@@ -131,11 +133,17 @@ class FeatureReconstructionModel(nn.Module):
                 list of str, names of the layers from which to extract features.
             - img_size: int,
                 size of the input images (assumed to be square) for upsampling the anomaly maps.
+            - per_layer_cosine: bool,
+                if True, the cosine distance (loss and anomaly map) is computed per layer and averaged,
+                so that every layer has the same weight. If False, a single cosine is computed on the
+                concatenated features. Identical when a single layer is used.
         '''
         super().__init__()
         self.teacher = FeatureExtractor(model_name=backbone_name, layers=feature_layers)
         self.student = FeatureAutoencoder(in_channels=self.teacher.total_channels)
         self.img_size = img_size  # anomaly maps are upsampled to the input image size
+        # Channels of each selected layer, in concatenation order (None = single global cosine)
+        self.channels_per_layer = list(self.teacher.out_channels.values()) if per_layer_cosine else None
 
     def forward(self, x):
         '''
@@ -162,11 +170,9 @@ class FeatureReconstructionModel(nn.Module):
         """
         Computes the anomaly map based on the cosine similarity between the target features and the reconstructed features.
         """
-        # Copute cosine similarity between the target and reconstructed features along the channel dimension
-        cos_sim = F.cosine_similarity(target_feat, recon_feat, dim=1) # [B, H_feat, W_feat]
-
-        # Compute the anomaly map as 1 - cosine similarity, and add a channel dimension
-        anomaly_map = (1.0 - cos_sim).unsqueeze(1)
+        # 1 - cosine similarity along the channel dimension (global or per layer, same as the loss),
+        # plus a channel dimension: [B, 1, H_feat, W_feat]
+        anomaly_map = cosine_distance_map(recon_feat, target_feat, self.channels_per_layer).unsqueeze(1)
 
         # Resize the anomaly map to the original image size
         anomaly_map = F.interpolate(anomaly_map, size=(self.img_size, self.img_size), mode="bilinear", align_corners=False)

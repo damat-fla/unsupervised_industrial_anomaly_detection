@@ -85,6 +85,7 @@ def build_model(config: dict, device: torch.device, checkpoint_path=None):
             backbone_name=config['backbone_name'], 
             feature_layers=config['feature_layers'],
             img_size=config['img_size'][0],
+            per_layer_cosine=config.get('per_layer_cosine', False),  # False = single cosine on concatenated features
         ).to(device)
     elif config['model_name'] == 'Autoencoder':
         model = Autoencoder(
@@ -116,7 +117,11 @@ def run_experiment_single_class(class_name: str, config: dict):
     model = build_model(config, DEVICE)
 
     # ================== LOSS, OPTIMIZER ==================
-    criterion = config['loss_fn']()
+    if config['model_name'] == 'FeatureReconstructionModel':
+        # the loss uses the same per-layer channel split as the anomaly map (None = single global cosine)
+        criterion = config['loss_fn'](channels_per_layer=model.channels_per_layer)
+    else:
+        criterion = config['loss_fn']()
     optimizer = torch.optim.Adam(model.parameters(), lr=config['learning_rate'])
 
     # ================== TRAINING ==================
