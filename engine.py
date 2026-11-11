@@ -1,3 +1,4 @@
+import csv
 import json
 from pathlib import Path
 import numpy as np
@@ -97,6 +98,9 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experimen
     pixel_auroc = AUROC(fields=["anomaly_map", "gt_mask"])
     aupro = AUPRO(fields=["anomaly_map", "gt_mask"], fpr_limit=0.3)
 
+    # Per-image anomaly scores, used for the error analysis (e.g. AUROC per defect type)
+    image_records = []
+
     with torch.inference_mode():
         for batch in tqdm(test_loader, desc="Evaluating", leave=True):
             images = batch["image"].to(device)
@@ -123,6 +127,13 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experimen
             pixel_auroc.update(metric_batch)
             aupro.update(metric_batch)
 
+            for path, defect_type, label, score in zip(
+                batch["path"], batch["defect_type"], labels.tolist(), image_scores.tolist()
+            ):
+                image_records.append(
+                    {"path": path, "defect_type": defect_type, "label": label, "score": score}
+                )
+
     metrics = {
         "image_auroc": image_auroc.compute().item(),
         "pixel_auroc": pixel_auroc.compute().item(),
@@ -134,5 +145,9 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experimen
         save_path.mkdir(parents=True, exist_ok=True)
         with open(save_path / "metrics.json", "w") as f:
             json.dump(metrics, f, indent=2)
+        with open(save_path / "image_scores.csv", "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["path", "defect_type", "label", "score"])
+            writer.writeheader()
+            writer.writerows(image_records)
 
     return metrics
