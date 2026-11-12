@@ -1,5 +1,6 @@
 from torchvision.models import resnet18, resnet50, ResNet18_Weights, ResNet50_Weights
 from torchvision.models.feature_extraction import create_feature_extractor
+from torchvision.ops import FeaturePyramidNetwork
 from torchvision.transforms.v2.functional import gaussian_blur, normalize
 from losses import cosine_distance_map
 import torch.nn.functional as F
@@ -119,7 +120,7 @@ class FeatureAutoencoder(nn.Module):
 class FeatureReconstructionModel(nn.Module):
 
     def __init__(self, backbone_name: str = "resnet18", feature_layers: list[str] = ["layer2"], img_size: int = 256,
-                 per_layer_cosine: bool = False):
+                 per_layer_cosine: bool = False, fusion: str = "concat", fpn_channels: int | None = None):
         '''
             A teacher-student model for feature reconstruction. The teacher is a pretrained feature extractor 
             (e.g., ResNet-18), and the student is a feature autoencoder that learns to reconstruct the features 
@@ -137,10 +138,35 @@ class FeatureReconstructionModel(nn.Module):
                 if True, the cosine distance (loss and anomaly map) is computed per layer and averaged,
                 so that every layer has the same weight. If False, a single cosine is computed on the
                 concatenated features. Identical when a single layer is used.
+            - fusion: str,
+                how the selected layers are fused into the student input. The reconstruction target is
+                always the (fixed) concatenation of the upsampled teacher features.
+                * "concat": the student input is the target itself.
+                * "fpn": the student input is the finest output of a trainable Feature Pyramid Network
+                  (torchvision implementation of Lin et al., 2017) applied to the teacher features.
+            - fpn_channels: int,
+                output channels of the FPN (default: total number of teacher channels). If smaller than the
+                total, the FPN compresses the features and a 1x1 conv projects them back to the total number
+                of channels, so that the student always has the same size as with "concat".
         '''
         super().__init__()
+        if fusion not in ("concat", "fpn"):
+            raise ValueError(f"Unknown fusion '{fusion}'. Choose from 'concat' or 'fpn'.")
+        # the FPN fuses levels top-down, so layers must go from the finest to the deepest
+        if fusion == "fpn" and feature_layers != sorted(feature_layers):
+            raise ValueError(f"With fusion='fpn' feature_layers must be ordered from shallow to deep, got {feature_layers}.")
+
         self.teacher = FeatureExtractor(model_name=backbone_name, layers=feature_layers)
-        self.student = FeatureAutoencoder(in_channels=self.teacher.total_channels)
+        total_channels = self.teacher.total_channels
+        self.fusion = fusion
+        if fusion == "fpn":
+            fpn_channels = fpn_channels or total_channels
+            self.fpn = FeaturePyramidNetwork(in_channels_list=list(self.teacher.out_channels.values()),
+                                             out_channels=fpn_channels)
+            # 1x1 projection back to the student input size when the FPN compresses the channels
+            self.fpn_proj = (nn.Conv2d(fpn_channels, total_channels, kernel_size=1)
+                             if fpn_channels != total_channels else nn.Identity())
+        self.student = FeatureAutoencoder(in_channels=total_channels)
         self.img_size = img_size  # anomaly maps are upsampled to the input image size
         # Channels of each selected layer, in concatenation order (None = single global cosine)
         self.channels_per_layer = list(self.teacher.out_channels.values()) if per_layer_cosine else None
@@ -151,13 +177,20 @@ class FeatureReconstructionModel(nn.Module):
         At inference time returns the anomaly map computed by cosine similarity between the teacher and student features.
         '''
 
-        feats = list(self.teacher(x).values())
+        teacher_feats = self.teacher(x)  # dict: layer name -> [B, C_l, H_l, W_l]
+        feats = list(teacher_feats.values())
         size = max(f.shape[-2:] for f in feats)  # highest resolution among the selected layers
-        # Upsample every layer to the same resolution and concatenate along the channel dimension
+        # Target: every layer upsampled to the same resolution and concatenated along the channel dimension
         target_feat = torch.cat(
             [F.interpolate(f, size=size, mode="bilinear", align_corners=False) for f in feats], dim=1
         )  # [B, total_channels, H, W]
-        recon_feat = self.student(target_feat)  # [B, total_channels, H, W]
+
+        if self.fusion == "fpn":
+            # finest FPN level (P2 for layer2+layer3) [B, fpn_channels, H, W], projected to [B, total_channels, H, W]
+            student_input = self.fpn_proj(next(iter(self.fpn(teacher_feats).values())))
+        else:
+            student_input = target_feat
+        recon_feat = self.student(student_input)  # [B, total_channels, H, W]
 
         return recon_feat, target_feat
 
