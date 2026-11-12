@@ -57,7 +57,6 @@ def visualize_anomalies(model, dataloader, device, visualize_reconstruction=Fals
     images = images.cpu()
     masks = masks.cpu()
     anomaly_maps = anomaly_maps.cpu()
-    recon = recon.cpu()
 
     titles = ["Input Image", "Ground Truth", "Anomaly Map", "Overlay"]
     if visualize_reconstruction:
@@ -89,7 +88,8 @@ def visualize_anomalies(model, dataloader, device, visualize_reconstruction=Fals
 
         # 5. Reconstruction (opzionale)
         if visualize_reconstruction:
-            recon_rgb = np.clip(recon[i].permute(1, 2, 0).numpy(), 0.0, 1.0)
+            # only for the pixel autoencoder (feature models reconstruct feature maps, possibly as lists)
+            recon_rgb = np.clip(recon[i].cpu().permute(1, 2, 0).numpy(), 0.0, 1.0)
             axes[i][4].imshow(recon_rgb)
 
         # Titoli solo sulla prima riga

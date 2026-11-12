@@ -221,3 +221,84 @@ class FeatureReconstructionModel(nn.Module):
         return anomaly_map
 
 
+# Decoder head of the multi-head student: reconstructs one teacher layer at its native resolution
+class DecoderHead(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        # same structure as the single-head decoder: 2x upsampling block, then a conv to the layer channels
+        self.block = DecoderBlock(in_channels, out_channels * 2)
+        self.out_conv = nn.Conv2d(out_channels * 2, out_channels, kernel_size=3, padding=1)
+
+    def forward(self, z, size):
+        x = self.block(z)
+        x = F.interpolate(x, size=size, mode="bilinear", align_corners=False)  # to the native resolution of the layer
+        return self.out_conv(x)
+
+
+# Multi-head student: shared encoder on the concatenated features + one decoder head per teacher layer
+class MultiHeadFeatureAutoencoder(nn.Module):
+    def __init__(self, in_channels: int, channels_per_layer: list[int]):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            EncoderBlock(in_channels, in_channels * 2),
+            EncoderBlock(in_channels * 2, in_channels * 4),
+        )
+        self.heads = nn.ModuleList(DecoderHead(in_channels * 4, c) for c in channels_per_layer)
+
+    def forward(self, x, sizes):
+        z = self.encoder(x)
+        return [head(z, size) for head, size in zip(self.heads, sizes)]
+
+
+# Multi-head Feature Reconstruction Model (variant inspired by RD4AD, Deng & Li, CVPR 2022)
+class MultiHeadFeatureReconstructionModel(nn.Module):
+
+    def __init__(self, backbone_name: str = "resnet18", feature_layers: list[str] = ["layer2", "layer3"],
+                 img_size: int = 256):
+        '''
+            Teacher-student feature reconstruction with one decoder head per teacher layer.
+            The student input is the concatenation of the teacher layers upsampled to the highest resolution
+            (as in FeatureReconstructionModel); a shared encoder compresses it and each head reconstructs one
+            layer at its native resolution. The targets are the raw teacher features of each layer.
+
+            Parameters
+            ---------
+            - backbone_name: str,
+                name of the pretrained model to use as the teacher.
+            - feature_layers:
+                list of str, names of the layers from which to extract features.
+            - img_size: int,
+                size of the input images (assumed to be square) for upsampling the anomaly maps.
+        '''
+        super().__init__()
+        self.teacher = FeatureExtractor(model_name=backbone_name, layers=feature_layers)
+        self.student = MultiHeadFeatureAutoencoder(in_channels=self.teacher.total_channels,
+                                                   channels_per_layer=list(self.teacher.out_channels.values()))
+        self.img_size = img_size  # anomaly maps are upsampled to the input image size
+
+    def forward(self, x):
+        '''
+        Returns two lists with one tensor per layer, each at the native resolution of the layer:
+        the reconstructed features [B, C_l, H_l, W_l] and the teacher features (targets).
+        '''
+        target_feats = list(self.teacher(x).values())
+        size = max(f.shape[-2:] for f in target_feats)  # highest resolution among the selected layers
+        student_input = torch.cat(
+            [F.interpolate(f, size=size, mode="bilinear", align_corners=False) for f in target_feats], dim=1
+        )  # [B, total_channels, H, W]
+        recon_feats = self.student(student_input, [f.shape[-2:] for f in target_feats])
+        return recon_feats, target_feats
+
+    def compute_anomaly_map(self, recon_feats: list[torch.Tensor], target_feats: list[torch.Tensor]) -> torch.Tensor:
+        """
+        One cosine distance map per layer at its native resolution, upsampled to the image size and averaged,
+        so that every layer has the same weight. Returns [B, 1, img_size, img_size].
+        """
+        maps = [
+            F.interpolate(cosine_distance_map(r, t).unsqueeze(1), size=(self.img_size, self.img_size),
+                          mode="bilinear", align_corners=False)
+            for r, t in zip(recon_feats, target_feats)
+        ]
+        return torch.stack(maps).mean(dim=0)
+
+

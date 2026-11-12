@@ -1,4 +1,4 @@
-from models.feature_autoencoder import FeatureReconstructionModel
+from models.feature_autoencoder import FeatureReconstructionModel, MultiHeadFeatureReconstructionModel
 from models.pixel_autoencoder import Autoencoder
 from torchvision.transforms import v2
 from utils.helpers import get_device, set_seed
@@ -88,6 +88,12 @@ def build_model(config: dict, device: torch.device, checkpoint_path=None):
             per_layer_cosine=config.get('per_layer_cosine', False),  # False = single cosine on concatenated features
             fusion=config.get('fusion', 'concat'),  # how the layers are fused into the student input
             fpn_channels=config.get('fpn_channels'),  # None = total teacher channels
+        ).to(device)
+    elif config['model_name'] == 'MultiHeadFeatureReconstructionModel':
+        model = MultiHeadFeatureReconstructionModel(
+            backbone_name=config['backbone_name'],
+            feature_layers=config['feature_layers'],
+            img_size=config['img_size'][0],
         ).to(device)
     elif config['model_name'] == 'Autoencoder':
         model = Autoencoder(

@@ -55,6 +55,16 @@ class CosineLoss(nn.Module):
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         return cosine_distance_map(pred, target, self.channels_per_layer).mean()
 
+
+class MultiLayerCosineLoss(nn.Module):
+    """
+    Cosine loss for lists of per-layer feature maps, possibly at different resolutions
+    (MultiHeadFeatureReconstructionModel): 1 - cosine similarity averaged over the positions of each layer,
+    then averaged over the layers, so that every layer has the same weight.
+    """
+    def forward(self, pred: list[torch.Tensor], target: list[torch.Tensor]) -> torch.Tensor:
+        return torch.stack([cosine_distance_map(p, t).mean() for p, t in zip(pred, target)]).mean()
+
 class MSELoss(nn.Module):
     """
     Mean Squared Error loss for feature reconstruction.
