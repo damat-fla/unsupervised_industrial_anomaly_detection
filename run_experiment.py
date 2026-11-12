@@ -86,8 +86,6 @@ def build_model(config: dict, device: torch.device, checkpoint_path=None):
             feature_layers=config['feature_layers'],
             img_size=config['img_size'][0],
             per_layer_cosine=config.get('per_layer_cosine', False),  # False = single cosine on concatenated features
-            fusion=config.get('fusion', 'concat'),  # how the layers are fused into the student input
-            fpn_channels=config.get('fpn_channels'),  # None = total teacher channels
         ).to(device)
     elif config['model_name'] == 'MultiHeadFeatureReconstructionModel':
         model = MultiHeadFeatureReconstructionModel(
