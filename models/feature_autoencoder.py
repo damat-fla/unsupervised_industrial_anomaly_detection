@@ -237,16 +237,20 @@ class DecoderHead(nn.Module):
 
 # Multi-head student: shared encoder on the concatenated features + one decoder head per teacher layer
 class MultiHeadFeatureAutoencoder(nn.Module):
-    def __init__(self, in_channels: int, channels_per_layer: list[int]):
+    def __init__(self, in_channels: int, channels_per_layer: list[int], bottleneck_channels: int | None = None,
+                 bottleneck_dropout: float = 0.0):
         super().__init__()
+        bottleneck_channels = bottleneck_channels or in_channels * 4
         self.encoder = nn.Sequential(
             EncoderBlock(in_channels, in_channels * 2),
-            EncoderBlock(in_channels * 2, in_channels * 4),
+            EncoderBlock(in_channels * 2, bottleneck_channels),
         )
-        self.heads = nn.ModuleList(DecoderHead(in_channels * 4, c) for c in channels_per_layer)
+        # dropout on the bottleneck z (active only in train mode); Identity when disabled
+        self.dropout = nn.Dropout(bottleneck_dropout) if bottleneck_dropout > 0 else nn.Identity()
+        self.heads = nn.ModuleList(DecoderHead(bottleneck_channels, c) for c in channels_per_layer)
 
     def forward(self, x, sizes):
-        z = self.encoder(x)
+        z = self.dropout(self.encoder(x))
         return [head(z, size) for head, size in zip(self.heads, sizes)]
 
 
@@ -254,7 +258,7 @@ class MultiHeadFeatureAutoencoder(nn.Module):
 class MultiHeadFeatureReconstructionModel(nn.Module):
 
     def __init__(self, backbone_name: str = "resnet18", feature_layers: list[str] = ["layer2", "layer3"],
-                 img_size: int = 256):
+                 img_size: int = 256, bottleneck_channels: int | None = None, bottleneck_dropout: float = 0.0):
         '''
             Teacher-student feature reconstruction with one decoder head per teacher layer.
             The student input is the concatenation of the teacher layers upsampled to the highest resolution
@@ -269,11 +273,19 @@ class MultiHeadFeatureReconstructionModel(nn.Module):
                 list of str, names of the layers from which to extract features.
             - img_size: int,
                 size of the input images (assumed to be square) for upsampling the anomaly maps.
+            - bottleneck_channels: int,
+                channels of the bottleneck z at the end of the shared encoder (default: 4x the input channels).
+                A smaller value compresses z, limiting the capacity of the student to copy anomalies.
+            - bottleneck_dropout: float,
+                dropout probability on z during training (default 0: disabled). The student has to reconstruct
+                from incomplete information, which discourages copying the input (identity shortcut).
         '''
         super().__init__()
         self.teacher = FeatureExtractor(model_name=backbone_name, layers=feature_layers)
         self.student = MultiHeadFeatureAutoencoder(in_channels=self.teacher.total_channels,
-                                                   channels_per_layer=list(self.teacher.out_channels.values()))
+                                                   channels_per_layer=list(self.teacher.out_channels.values()),
+                                                   bottleneck_channels=bottleneck_channels,
+                                                   bottleneck_dropout=bottleneck_dropout)
         self.img_size = img_size  # anomaly maps are upsampled to the input image size
 
     def forward(self, x):

@@ -94,6 +94,8 @@ def build_model(config: dict, device: torch.device, checkpoint_path=None):
             backbone_name=config['backbone_name'],
             feature_layers=config['feature_layers'],
             img_size=config['img_size'][0],
+            bottleneck_channels=config.get('bottleneck_channels'),  # None = 4x the input channels
+            bottleneck_dropout=config.get('bottleneck_dropout', 0.0),  # 0 = no dropout on the bottleneck
         ).to(device)
     elif config['model_name'] == 'Autoencoder':
         model = Autoencoder(
