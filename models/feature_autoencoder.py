@@ -1,6 +1,8 @@
-from torchvision.models import resnet18, resnet50, ResNet18_Weights, ResNet50_Weights
+from torchvision.models import (resnet18, resnet50, wide_resnet50_2,
+                                ResNet18_Weights, ResNet50_Weights, Wide_ResNet50_2_Weights)
 from torchvision.models.feature_extraction import create_feature_extractor
-from torchvision.transforms.v2.functional import gaussian_blur, normalize
+from torchvision.transforms.v2.functional import normalize
+from utils.helpers import smooth_anomaly_map
 from losses import cosine_distance_map
 import torch.nn.functional as F
 import torch.nn as nn
@@ -53,8 +55,12 @@ class FeatureExtractor(nn.Module):
             model = resnet18(weights=ResNet18_Weights.DEFAULT)
         elif model_name == "resnet50":
             model = resnet50(weights=ResNet50_Weights.DEFAULT)
+        elif model_name == "wide_resnet50_2":
+            # V1 weights: the ones used by PatchCore/PaDiM, for a like-for-like comparison
+            model = wide_resnet50_2(weights=Wide_ResNet50_2_Weights.IMAGENET1K_V1)
         else:
-            raise ValueError(f"Unsupported model_name: {model_name}. Choose one of available options: 'resnet18', 'resnet50'.")
+            raise ValueError(f"Unsupported model_name: {model_name}. Choose one of available options: "
+                             f"'resnet18', 'resnet50', 'wide_resnet50_2'.")
 
         model.eval()
         for param in model.parameters():
@@ -119,7 +125,7 @@ class FeatureAutoencoder(nn.Module):
 class FeatureReconstructionModel(nn.Module):
 
     def __init__(self, backbone_name: str = "resnet18", feature_layers: list[str] = ["layer2"], img_size: int = 256,
-                 per_layer_cosine: bool = False):
+                 per_layer_cosine: bool = False, blur_sigma: float = 0.0):
         '''
             A teacher-student model for feature reconstruction. The teacher is a pretrained feature extractor 
             (e.g., ResNet-18), and the student is a feature autoencoder that learns to reconstruct the features 
@@ -137,6 +143,9 @@ class FeatureReconstructionModel(nn.Module):
                 if True, the cosine distance (loss and anomaly map) is computed per layer and averaged,
                 so that every layer has the same weight. If False, a single cosine is computed on the
                 concatenated features. Identical when a single layer is used.
+            - blur_sigma: float,
+                sigma of the Gaussian smoothing of the anomaly map (default 0: no smoothing).
+                Used only by compute_anomaly_map: it does not affect training or the loss.
         '''
         super().__init__()
         self.teacher = FeatureExtractor(model_name=backbone_name, layers=feature_layers)
@@ -144,6 +153,7 @@ class FeatureReconstructionModel(nn.Module):
         self.img_size = img_size  # anomaly maps are upsampled to the input image size
         # Channels of each selected layer, in concatenation order (None = single global cosine)
         self.channels_per_layer = list(self.teacher.out_channels.values()) if per_layer_cosine else None
+        self.blur_sigma = blur_sigma
 
     def forward(self, x):
         '''
@@ -161,14 +171,10 @@ class FeatureReconstructionModel(nn.Module):
 
         return recon_feat, target_feat
 
-    def compute_anomaly_map(
-        self,
-        recon_feat: torch.Tensor,
-        target_feat: torch.Tensor,
-        blur_sigma: float = 4.0
-    ) -> torch.Tensor:
+    def compute_anomaly_map(self, recon_feat: torch.Tensor, target_feat: torch.Tensor) -> torch.Tensor:
         """
-        Computes the anomaly map based on the cosine similarity between the target features and the reconstructed features.
+        Computes the anomaly map based on the cosine similarity between the target features and the reconstructed
+        features, upsampled to the image size and smoothed with self.blur_sigma. Returns [B, 1, img_size, img_size].
         """
         # 1 - cosine similarity along the channel dimension (global or per layer, same as the loss),
         # plus a channel dimension: [B, 1, H_feat, W_feat]
@@ -177,15 +183,7 @@ class FeatureReconstructionModel(nn.Module):
         # Resize the anomaly map to the original image size
         anomaly_map = F.interpolate(anomaly_map, size=(self.img_size, self.img_size), mode="bilinear", align_corners=False)
 
-        # gaussian blur the anomaly map to smooth it out and reduce noise
-        # if blur_sigma is not None and blur_sigma > 0:
-        #     kernel_size = int(2 * round(2 * blur_sigma) + 1)
-        #     anomaly_map = gaussian_blur(
-        #         anomaly_map, 
-        #         kernel_size=[kernel_size, kernel_size], 
-        #         sigma=[blur_sigma, blur_sigma]
-        #    )
-        return anomaly_map
+        return smooth_anomaly_map(anomaly_map, self.blur_sigma)
 
 
 # Decoder head of the multi-head student: reconstructs one teacher layer at its native resolution
@@ -225,7 +223,8 @@ class MultiHeadFeatureAutoencoder(nn.Module):
 class MultiHeadFeatureReconstructionModel(nn.Module):
 
     def __init__(self, backbone_name: str = "resnet18", feature_layers: list[str] = ["layer2", "layer3"],
-                 img_size: int = 256, bottleneck_channels: int | None = None, bottleneck_dropout: float = 0.0):
+                 img_size: int = 256, bottleneck_channels: int | None = None, bottleneck_dropout: float = 0.0,
+                 blur_sigma: float = 0.0):
         '''
             Teacher-student feature reconstruction with one decoder head per teacher layer.
             The student input is the concatenation of the teacher layers upsampled to the highest resolution
@@ -246,6 +245,9 @@ class MultiHeadFeatureReconstructionModel(nn.Module):
             - bottleneck_dropout: float,
                 dropout probability on z during training (default 0: disabled). The student has to reconstruct
                 from incomplete information, which discourages copying the input (identity shortcut).
+            - blur_sigma: float,
+                sigma of the Gaussian smoothing of the anomaly map (default 0: no smoothing).
+                Used only by compute_anomaly_map: it does not affect training or the loss.
         '''
         super().__init__()
         self.teacher = FeatureExtractor(model_name=backbone_name, layers=feature_layers)
@@ -254,6 +256,7 @@ class MultiHeadFeatureReconstructionModel(nn.Module):
                                                    bottleneck_channels=bottleneck_channels,
                                                    bottleneck_dropout=bottleneck_dropout)
         self.img_size = img_size  # anomaly maps are upsampled to the input image size
+        self.blur_sigma = blur_sigma
 
     def forward(self, x):
         '''
@@ -271,13 +274,13 @@ class MultiHeadFeatureReconstructionModel(nn.Module):
     def compute_anomaly_map(self, recon_feats: list[torch.Tensor], target_feats: list[torch.Tensor]) -> torch.Tensor:
         """
         One cosine distance map per layer at its native resolution, upsampled to the image size and averaged,
-        so that every layer has the same weight. Returns [B, 1, img_size, img_size].
+        so that every layer has the same weight, then smoothed with self.blur_sigma. Returns [B, 1, img_size, img_size].
         """
         maps = [
             F.interpolate(cosine_distance_map(r, t).unsqueeze(1), size=(self.img_size, self.img_size),
                           mode="bilinear", align_corners=False)
             for r, t in zip(recon_feats, target_feats)
         ]
-        return torch.stack(maps).mean(dim=0)
+        return smooth_anomaly_map(torch.stack(maps).mean(dim=0), self.blur_sigma)
 
 

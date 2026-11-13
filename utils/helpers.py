@@ -3,6 +3,7 @@ import random
 from pathlib import Path
 import numpy as np
 import torch
+from torchvision.transforms.v2.functional import gaussian_blur
 
 
 def set_seed(seed: int = 42):
@@ -31,6 +32,17 @@ def get_device(device_name: str = None):
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     return device
+
+
+def smooth_anomaly_map(anomaly_map: torch.Tensor, sigma: float) -> torch.Tensor:
+    """
+    Gaussian smoothing of an anomaly map [B, 1, H, W] (kernel size 2*round(2*sigma)+1).
+    sigma = 0 (or None) returns the map unchanged.
+    """
+    if not sigma:
+        return anomaly_map
+    kernel_size = int(2 * round(2 * sigma) + 1)
+    return gaussian_blur(anomaly_map, kernel_size=[kernel_size, kernel_size], sigma=[sigma, sigma])
 
 
 def load_checkpoint(model: torch.nn.Module, checkpoint_path: str | Path, device: torch.device = None, strict: bool = True):

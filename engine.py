@@ -91,7 +91,11 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
     return history
 
 
-def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experiments/baseline"):
+def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experiments/baseline", suffix=""):
+    """
+    Computes the test metrics and, if save_dir is given, saves metrics{suffix}.json and image_scores{suffix}.csv
+    (e.g. suffix="_sigma4" when re-evaluating a checkpoint, so that the original results are not overwritten).
+    """
     model.eval()
 
     image_auroc = AUROC(fields=["pred_score", "gt_label"])
@@ -143,9 +147,9 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experimen
     if save_dir:
         save_path = Path(save_dir)
         save_path.mkdir(parents=True, exist_ok=True)
-        with open(save_path / "metrics.json", "w") as f:
+        with open(save_path / f"metrics{suffix}.json", "w") as f:
             json.dump(metrics, f, indent=2)
-        with open(save_path / "image_scores.csv", "w", newline="") as f:
+        with open(save_path / f"image_scores{suffix}.csv", "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["path", "defect_type", "label", "score"])
             writer.writeheader()
             writer.writerows(image_records)

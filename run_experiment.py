@@ -5,6 +5,7 @@ from utils.helpers import get_device, set_seed
 from dataset import MVTec2DDataset
 from engine import evaluate, train
 from pathlib import Path
+import pandas as pd
 import torch
 import json
 import gc
@@ -86,6 +87,7 @@ def build_model(config: dict, device: torch.device, checkpoint_path=None):
             feature_layers=config['feature_layers'],
             img_size=config['img_size'][0],
             per_layer_cosine=config.get('per_layer_cosine', False),  # False = single cosine on concatenated features
+            blur_sigma=config.get('blur_sigma', 0.0),  # 0 = no smoothing of the anomaly map
         ).to(device)
     elif config['model_name'] == 'MultiHeadFeatureReconstructionModel':
         model = MultiHeadFeatureReconstructionModel(
@@ -94,6 +96,7 @@ def build_model(config: dict, device: torch.device, checkpoint_path=None):
             img_size=config['img_size'][0],
             bottleneck_channels=config.get('bottleneck_channels'),  # None = 4x the input channels
             bottleneck_dropout=config.get('bottleneck_dropout', 0.0),  # 0 = no dropout on the bottleneck
+            blur_sigma=config.get('blur_sigma', 0.0),  # 0 = no smoothing of the anomaly map
         ).to(device)
     elif config['model_name'] == 'Autoencoder':
         model = Autoencoder(
@@ -166,5 +169,36 @@ def run_experiment_single_class(class_name: str, config: dict):
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        
+
     return history, metrics
+
+
+def reevaluate_experiment(config: dict, blur_sigma: float, classes: list[str]):
+    """
+    Re-evaluates the best checkpoints of a finished experiment with a different smoothing of the anomaly map
+    (no training: blur_sigma is used only by compute_anomaly_map). For each class saves metrics_sigma{s}.json and
+    image_scores_sigma{s}.csv next to the original results, then overall_results_sigma{s}.csv for the experiment.
+    Returns a DataFrame with one row per class plus the MEAN.
+    """
+
+    config = {**config, 'blur_sigma': blur_sigma}
+    suffix = f"_sigma{blur_sigma:g}"
+    device = get_device(config['device'])
+    exp_dir = Path(config['output_dir']) / config['experiment_name']
+
+    results = {}
+    for class_name in classes:
+        print(f"\n{'='*30}  Re-evaluating class: {class_name.upper()} (sigma = {blur_sigma:g})  {'='*30}")
+        _, _, test_loader = build_dataloaders(class_name, config)
+        model = build_model(config, device, checkpoint_path=exp_dir / class_name / "checkpoints" / "best_model.pth")
+        results[class_name] = evaluate(model, test_loader, device, save_dir=exp_dir / class_name, suffix=suffix)
+
+        del model, test_loader
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    df_results = pd.DataFrame.from_dict(results, orient='index')
+    df_results.loc['MEAN'] = df_results.mean()
+    df_results.to_csv(exp_dir / f"overall_results{suffix}.csv")
+    return df_results

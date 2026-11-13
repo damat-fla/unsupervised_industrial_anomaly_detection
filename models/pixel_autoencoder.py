@@ -1,4 +1,4 @@
-from torchvision.transforms.v2.functional import gaussian_blur
+from utils.helpers import smooth_anomaly_map
 from losses import compute_ssim_map
 import torch.nn as nn
 import torch
@@ -168,8 +168,4 @@ class Autoencoder(nn.Module):
         else:
             anomaly_map = torch.mean((images - reconstructions) ** 2, dim=1, keepdim=True)
 
-        if blur_sigma is not None and blur_sigma > 0:
-            kernel_size = int(2 * round(2 * blur_sigma) + 1)
-            anomaly_map = gaussian_blur(anomaly_map, kernel_size=[kernel_size, kernel_size], sigma=[blur_sigma, blur_sigma])
-
-        return anomaly_map
+        return smooth_anomaly_map(anomaly_map, blur_sigma)
