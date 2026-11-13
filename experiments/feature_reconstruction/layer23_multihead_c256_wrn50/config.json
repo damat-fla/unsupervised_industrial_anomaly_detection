@@ -1,0 +1,24 @@
+{
+  "experiment_name": "layer23_multihead_c256_wrn50",
+  "device": "cuda",
+  "num_workers": 0,
+  "seed": 42,
+  "cache_data": true,
+  "img_size": [
+    256,
+    256
+  ],
+  "batch_size": 16,
+  "loss_fn": "MultiLayerCosineLoss",
+  "learning_rate": 0.001,
+  "num_epochs": 75,
+  "patience": 5,
+  "model_name": "MultiHeadFeatureReconstructionModel",
+  "backbone_name": "wide_resnet50_2",
+  "feature_layers": [
+    "layer2",
+    "layer3"
+  ],
+  "bottleneck_channels": 256,
+  "output_dir": "./experiments/feature_reconstruction"
+}

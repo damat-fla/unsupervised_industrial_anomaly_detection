@@ -1,0 +1,24 @@
+{
+  "experiment_name": "layer23_global",
+  "device": "cuda",
+  "num_workers": 0,
+  "seed": 42,
+  "cache_data": true,
+  "img_size": [
+    256,
+    256
+  ],
+  "batch_size": 16,
+  "loss_fn": "CosineLoss",
+  "learning_rate": 0.001,
+  "num_epochs": 75,
+  "patience": 5,
+  "model_name": "FeatureReconstructionModel",
+  "backbone_name": "resnet18",
+  "feature_layers": [
+    "layer2",
+    "layer3"
+  ],
+  "per_layer_cosine": false,
+  "output_dir": "./experiments/feature_reconstruction"
+}
