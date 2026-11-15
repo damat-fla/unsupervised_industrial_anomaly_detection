@@ -51,8 +51,11 @@ def visualize_anomalies(model, dataloader, device, visualize_reconstruction=Fals
     image_names = batch["path"]
 
     with torch.no_grad():
-        recon, target = model(images)
-        anomaly_maps = model.compute_anomaly_map(recon, target)
+        if hasattr(model, "predict"):  # methods from the literature (models/literature_models.py)
+            anomaly_maps, _ = model.predict(images)
+        else:
+            recon, target = model(images)
+            anomaly_maps = model.compute_anomaly_map(recon, target)
 
     images = images.cpu()
     masks = masks.cpu()
