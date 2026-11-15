@@ -95,12 +95,23 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experimen
     """
     Computes the test metrics and, if save_dir is given, saves metrics{suffix}.json and image_scores{suffix}.csv
     (e.g. suffix="_sigma4" when re-evaluating a checkpoint, so that the original results are not overwritten).
+
+    Two kinds of models are supported:
+    - custom models (feature/pixel reconstruction): pred, target = model(images), then model.compute_anomaly_map.
+      The image score is the mean of the top-k_ratio pixels of the anomaly map.
+    - methods from the literature (models/literature_models.py), recognized by a predict() method returning the
+      anomaly map and the native image score of the method. The native score is the main score ("score",
+      "image_auroc"); the top-k score is also saved ("score_top1pct", "image_auroc_top1pct") to compare the
+      methods with the same aggregation of the map.
     """
     model.eval()
+    has_native_score = hasattr(model, "predict")
 
     image_auroc = AUROC(fields=["pred_score", "gt_label"])
     pixel_auroc = AUROC(fields=["anomaly_map", "gt_mask"])
     aupro = AUPRO(fields=["anomaly_map", "gt_mask"], fpr_limit=0.3)
+    if has_native_score:
+        image_auroc_top1pct = AUROC(fields=["pred_score", "gt_label"])
 
     # Per-image anomaly scores, used for the error analysis (e.g. AUROC per defect type)
     image_records = []
@@ -111,13 +122,18 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experimen
             masks = (batch["mask"] > 0.5).to(device)
             labels = batch["label"].to(device).int()
 
-            pred, target = model(images)
-            anomaly_maps = model.compute_anomaly_map(pred, target)
+            if has_native_score:
+                anomaly_maps, native_scores = model.predict(images)
+            else:
+                pred, target = model(images)
+                anomaly_maps = model.compute_anomaly_map(pred, target)
 
             # Robust image score using top-k average anomaly pixels instead of pure max
             flat_maps = anomaly_maps.flatten(1)
             k = max(1, int(flat_maps.size(1) * top_k_ratio))
-            image_scores = torch.topk(flat_maps, k=k, dim=1).values.mean(dim=1)
+            topk_scores = torch.topk(flat_maps, k=k, dim=1).values.mean(dim=1)
+
+            image_scores = native_scores if has_native_score else topk_scores
 
             metric_batch = ImageBatch(
                 image=images,
@@ -130,19 +146,24 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experimen
             image_auroc.update(metric_batch)
             pixel_auroc.update(metric_batch)
             aupro.update(metric_batch)
+            if has_native_score:
+                image_auroc_top1pct.update(ImageBatch(image=images, pred_score=topk_scores, gt_label=labels))
 
-            for path, defect_type, label, score in zip(
+            for i, (path, defect_type, label, score) in enumerate(zip(
                 batch["path"], batch["defect_type"], labels.tolist(), image_scores.tolist()
-            ):
-                image_records.append(
-                    {"path": path, "defect_type": defect_type, "label": label, "score": score}
-                )
+            )):
+                record = {"path": path, "defect_type": defect_type, "label": label, "score": score}
+                if has_native_score:
+                    record["score_top1pct"] = topk_scores[i].item()
+                image_records.append(record)
 
     metrics = {
         "image_auroc": image_auroc.compute().item(),
         "pixel_auroc": pixel_auroc.compute().item(),
         "aupro": aupro.compute().item(),
     }
+    if has_native_score:
+        metrics["image_auroc_top1pct"] = image_auroc_top1pct.compute().item()
 
     if save_dir:
         save_path = Path(save_dir)
@@ -150,7 +171,7 @@ def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experimen
         with open(save_path / f"metrics{suffix}.json", "w") as f:
             json.dump(metrics, f, indent=2)
         with open(save_path / f"image_scores{suffix}.csv", "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["path", "defect_type", "label", "score"])
+            writer = csv.DictWriter(f, fieldnames=list(image_records[0].keys()))
             writer.writeheader()
             writer.writerows(image_records)
 
