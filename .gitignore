@@ -1,5 +1,6 @@
 /data/
 checkpoints/
+memory_bank.pt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
