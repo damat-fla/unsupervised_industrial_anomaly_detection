@@ -1,0 +1,20 @@
+{
+  "experiment_name": "resnet18",
+  "device": "cuda",
+  "num_workers": 0,
+  "seed": 42,
+  "img_size": [
+    256,
+    256
+  ],
+  "batch_size": 32,
+  "model_name": "PatchCore",
+  "backbone_name": "resnet18.tv_in1k",
+  "feature_layers": [
+    "layer2",
+    "layer3"
+  ],
+  "coreset_sampling_ratio": 0.1,
+  "num_neighbors": 9,
+  "output_dir": "./experiments/patchcore"
+}

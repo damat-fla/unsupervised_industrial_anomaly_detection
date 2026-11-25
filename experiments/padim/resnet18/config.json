@@ -1,0 +1,20 @@
+{
+  "experiment_name": "resnet18",
+  "device": "cuda",
+  "num_workers": 0,
+  "seed": 42,
+  "img_size": [
+    256,
+    256
+  ],
+  "batch_size": 32,
+  "model_name": "PaDiM",
+  "backbone_name": "resnet18.tv_in1k",
+  "feature_layers": [
+    "layer1",
+    "layer2",
+    "layer3"
+  ],
+  "n_features": 100,
+  "output_dir": "./experiments/padim"
+}
