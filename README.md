@@ -37,11 +37,12 @@ reports the final version of each:
 
 ## Notebooks
 
-Suggested reading order:
+The notebooks are mainly used to run the experiments and show their results: most of the code is in the Python
+modules (see the repository structure below). To see what was done, start from the notebooks, in this order:
 
 | notebook | content |
 |---|---|
-| `pixel_reconstruction.ipynb` | first approach: convolutional autoencoder trained to reconstructs the input image (5 vaariants)|
+| `pixel_reconstruction.ipynb` | first approach: convolutional autoencoder trained to reconstruct the input image (5 variants) |
 | `feature_reconstruction.ipynb` | custom model: baseline and ablation study (layers, loss, layer fusion, identity shortcut, backbone, smoothing of the map) |
 | `patchCore.ipynb` | PatchCore (anomalib implementation) under the project's protocol |
 | `PaDiM.ipynb` | PaDiM (anomalib implementation) under the project's protocol |
