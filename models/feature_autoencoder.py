@@ -19,9 +19,6 @@ class EncoderBlock(nn.Module):
             nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding),
             nn.BatchNorm2d(out_channels),
             nn.LeakyReLU(0.1, inplace=True),
-            # nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=padding),
-            # nn.BatchNorm2d(out_channels),
-            # nn.LeakyReLU(0.1, inplace=True),
         )
 
     def forward(self, x):
@@ -35,15 +32,12 @@ class DecoderBlock(nn.Module):
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
             nn.LeakyReLU(0.1, inplace=True),
-            # nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            # nn.BatchNorm2d(out_channels),
-            # nn.LeakyReLU(0.1, inplace=True),
         )
 
     def forward(self, x):
         return self.block(x)
 
-# Teacher: a wrapper around a pretrained feature extractor (e.g., ResNet-18)
+# Teacher: a wrapper around a pretrained feature extractor
 class FeatureExtractor(nn.Module):
     def __init__(self, model_name: str = "resnet18", layers: list[str] = ["layer2"]):
         super().__init__()
@@ -56,7 +50,7 @@ class FeatureExtractor(nn.Module):
         elif model_name == "resnet50":
             model = resnet50(weights=ResNet50_Weights.DEFAULT)
         elif model_name == "wide_resnet50_2":
-            # V1 weights: the ones used by PatchCore/PaDiM, for a like-for-like comparison
+            # V1 weights: the ones used by PatchCore/PaDiM
             model = wide_resnet50_2(weights=Wide_ResNet50_2_Weights.IMAGENET1K_V1)
         else:
             raise ValueError(f"Unsupported model_name: {model_name}. Choose one of available options: "
@@ -210,7 +204,7 @@ class MultiHeadFeatureAutoencoder(nn.Module):
             EncoderBlock(in_channels, in_channels * 2),
             EncoderBlock(in_channels * 2, bottleneck_channels),
         )
-        # dropout on the bottleneck z (active only in train mode); Identity when disabled
+        # dropout on the bottleneck z (active only in train mode). Identity when disabled
         self.dropout = nn.Dropout(bottleneck_dropout) if bottleneck_dropout > 0 else nn.Identity()
         self.heads = nn.ModuleList(DecoderHead(bottleneck_channels, c) for c in channels_per_layer)
 

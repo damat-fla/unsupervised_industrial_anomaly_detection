@@ -1,6 +1,6 @@
 """
 Runs of the methods from the literature (PatchCore, PaDiM). Separate from run_experiment.py because the protocol
-is different: no training, the statistics of the backbone features are fitted with a single pass over train/.
+is different: no training, the statistics of the backbone features are fitted with a single pass over the training data.
 Data and evaluation are the same as for the custom models (build_dataloaders, engine.evaluate).
 """
 
@@ -32,15 +32,15 @@ def build_literature_model(config: dict, device: torch.device, memory_bank_path=
         raise ValueError(f"Unknown model name: {config['model_name']}")
 
     if memory_bank_path:
-        # restores a fitted PatchCore memory bank (e.g. to visualize the anomaly maps without fitting again)
+        # restores a fitted PatchCore memory bank without fitting again
         model.model.memory_bank = torch.load(memory_bank_path, map_location=device)
     return model
 
 
 def fit_literature_model(class_name: str, config: dict):
     """
-    Fits the model on train/ of the class and returns it with the test loader. Also used to get back a fitted
-    PaDiM (not saved on disk): the seed is set before the model is created, so the result is the same as in the run.
+    Fits the model on the training set of the class and returns it with the test loader. Also used to get back a fitted
+    PaDiM (not saved on disk).
     """
     set_seed(config['seed'])
     device = get_device(config['device'])
@@ -61,6 +61,12 @@ def fit_literature_model(class_name: str, config: dict):
 
 
 def run_literature_single_class(class_name: str, config: dict):
+
+    '''
+    Entry point of the script. Orchestrates the instantiation of the model, fitting, evaluation, 
+    and saving of results for a single class.
+    '''
+
     print(f"\n{'='*30}  Starting class: {class_name.upper()}  {'='*30}")
 
     out_dir = Path(config['output_dir']) / config['experiment_name'] / class_name
@@ -68,12 +74,15 @@ def run_literature_single_class(class_name: str, config: dict):
     with open(out_dir.parent / "config.json", "w") as f:
         json.dump(config, f, indent=2)
 
+    # Fit the model on the training set 
     model, test_loader = fit_literature_model(class_name, config)
     if config['model_name'] == 'PatchCore':  # PaDiM is not saved: fit it again with fit_literature_model
         torch.save(model.model.memory_bank, out_dir / "memory_bank.pt")
 
+    # Evaluate the model on the test set and save metrics
     metrics = evaluate(model, test_loader, get_device(config['device']), save_dir=out_dir)
 
+    # Clean up to free memory
     del model, test_loader
     gc.collect()
     if torch.cuda.is_available():

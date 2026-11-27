@@ -67,7 +67,7 @@ class MultiLayerCosineLoss(nn.Module):
 
 class MSELoss(nn.Module):
     """
-    Mean Squared Error loss for feature reconstruction.
+    Mean Squared Error loss for pixel reconstruction.
     Computes the average squared difference between pred and target.
     """
     def __init__(self):

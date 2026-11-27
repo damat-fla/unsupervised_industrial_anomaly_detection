@@ -60,12 +60,12 @@ def _split_single_class(class_dir: Path, val_ratio: float, seed: int, force: boo
 def split_data(
     root: Union[str, Path] = "./data/MVTec",
     class_name: Optional[str] = None,
-    val_ratio: float = 0.2,
+    val_ratio: float = 0.15,
     seed: int = 42,
     force: bool = False,
 ) -> Dict[str, Dict[str, int]]:
     """
-    Split nominal training images of MVTec 2D into train and validation sets.
+    Split training images of MVTec 2D into train and validation sets.
     Preserves original data in data/MVTec/[class]/train_original.
     """
     root_path = Path(root)

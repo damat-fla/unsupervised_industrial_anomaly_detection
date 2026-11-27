@@ -6,7 +6,12 @@ from torch.utils.data import Dataset
 class MVTec2DDataset(Dataset):
     """
     PyTorch Dataset for 2D MVTec AD images and ground truth defect masks.
-    Supports any class under root/[class].
+    Supports any class under root/[class]. the contract is that the getitem method returns a dictionary with keys:
+    - "image": the input image (C, H, W) tensor
+    - "mask": the ground truth binary mask (1, H, W) tensor
+    - "label": 0 for normal, 1 for defect
+    - "defect_type": the defect type as a string (e.g. "good", "bent", "broken", etc.)
+    - "path": the path to the input image
     """
     def __init__(self, root="./data/MVTec", class_name="bottle", split="train", transforms=None, target_transforms=None, cache=False):
         base_dir = Path(root) / class_name

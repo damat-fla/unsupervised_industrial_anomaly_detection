@@ -18,7 +18,7 @@ def build_dataloaders(class_name: str, config: dict):
     transforms = v2.Compose([
         v2.Resize(config['img_size']),
         v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),  # valori in [0, 1]
+        v2.ToDtype(torch.float32, scale=True),  # values in [0, 1]
     ])
 
     # define transforms for the target (anomaly binary segmentation) images

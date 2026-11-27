@@ -5,7 +5,8 @@ import torch
 
 
 class ConvEncoderBlock(nn.Module):
-    
+    """Two 3x3 convs, the first with stride 2: halves the resolution."""
+
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=2, padding=1):
         super().__init__()
         self.block = nn.Sequential(
@@ -17,14 +18,14 @@ class ConvEncoderBlock(nn.Module):
             nn.LeakyReLU(0.1, inplace=True),
         )
 
-
-
     def forward(self, x):
         return self.block(x)
 
 
 
 class ConvDecoderBlock(nn.Module):
+    """Bilinear upsampling x2 followed by a 3x3 conv: doubles the resolution."""
+
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.block = nn.Sequential(
@@ -32,9 +33,6 @@ class ConvDecoderBlock(nn.Module):
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
             nn.LeakyReLU(0.1, inplace=True),
-            # nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            # nn.BatchNorm2d(out_channels),
-            # nn.LeakyReLU(0.1, inplace=True),
         )
 
     def forward(self, x):
@@ -42,6 +40,8 @@ class ConvDecoderBlock(nn.Module):
 
 
 class ResEncoderBlock(nn.Module):
+    """Residual version of ConvEncoderBlock: 1x1 stride-2 conv as shortcut."""
+
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.conv = nn.Sequential(
@@ -62,6 +62,8 @@ class ResEncoderBlock(nn.Module):
         return self.act(self.conv(x) + self.shortcut(x))
 
 class ResDecoderBlock(nn.Module):
+    """Residual decoder block: upsampling x2, then two 3x3 convs with a 1x1 conv shortcut."""
+
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
@@ -83,6 +85,7 @@ class ResDecoderBlock(nn.Module):
         return self.act(self.conv(x) + self.shortcut(x))
 
 class LinearBottleneck(nn.Module):
+    """Compresses the bottleneck feature map into a vector of latent_dim values and expands it back."""
 
     def __init__(self, channels, latent_dim, spatial_size=16):
         super().__init__()
@@ -106,6 +109,11 @@ class LinearBottleneck(nn.Module):
 
 
 class Autoencoder(nn.Module):
+    """
+    Convolutional autoencoder for pixel reconstruction: 4 encoder blocks (256 -> 16) and a symmetric decoder.
+    - block_type: 'conv' or 'residual' blocks.
+    - latent_dim: if given, adds a LinearBottleneck of that size.
+    """
     def __init__(self, in_channels=3, base_channels=32, latent_dim=None, block_type="conv", img_size=256):
         super().__init__()
 

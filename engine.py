@@ -10,7 +10,7 @@ from anomalib.data import ImageBatch
 
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
-    # Pay attenton when using model.train(). It recursively sets all submodules to training mode.
+    # Pay attention when using model.train(). It recursively sets all submodules to training mode.
     # Since my model contains the teacher (which I want to be frozen), I should ensure that it is 
     # not affected by model.train(). To do so, it suffices to override the train() method of the 
     # model to keep the teacher in eval mode.
@@ -94,7 +94,7 @@ def train(model, train_loader, criterion, optimizer, epochs, device, val_loader=
 def evaluate(model, test_loader, device, top_k_ratio=0.01, save_dir="./experiments/baseline", suffix=""):
     """
     Computes the test metrics and, if save_dir is given, saves metrics{suffix}.json and image_scores{suffix}.csv
-    (e.g. suffix="_sigma4" when re-evaluating a checkpoint, so that the original results are not overwritten).
+    (suffix="_sigma4" when re-evaluating a checkpoint, so that the original results are not overwritten).
 
     Two kinds of models are supported:
     - custom models (feature/pixel reconstruction): pred, target = model(images), then model.compute_anomaly_map.
