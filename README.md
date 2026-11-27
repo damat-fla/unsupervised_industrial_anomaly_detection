@@ -103,7 +103,12 @@ written to `experiments/<approach>/<experiment>/<class>/`:
 
 - `metrics.json`: Image AUROC, Pixel AUROC, AUPRO (and, for PatchCore and PaDiM, also the Image AUROC with the top-1% score);
 - `image_scores.csv`: anomaly score of every test image, used by the error analysis;
+- `history.json` (custom models only): training and validation loss per epoch and best epoch;
 - `config.json` and `overall_results.csv` for each experiment.
+
+The final feature reconstruction model (`layer23_multihead_c256`) was re-evaluated with a Gaussian blur of the
+anomaly map: its final results are in the files with suffix `_sigma4` (`_sigma2` for the intermediate value),
+while the files without suffix are the evaluation without blur used in the ablation.
 
 Model weights are **not** in the repository because they are too large: the checkpoints of the trained models (`checkpoints/`) and
 the PatchCore memory banks (`memory_bank.pt`) are excluded. The metrics and the per-image scores of the three
